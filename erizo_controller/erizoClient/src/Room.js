@@ -173,7 +173,7 @@ Erizo.Room = function (spec) {
 
             stream.pc = Erizo.Connection({callback: function (msg) {
                 sendSDPSocket('signaling_message', {streamId: stream.getID(), peerSocket: peerSocket, msg: msg});
-            }, stunServerUrl: that.stunServerUrl, turnServer: that.turnServer, maxAudioBW: spec.maxAudioBW, maxVideoBW: spec.maxVideoBW});
+            }, stunServerUrl: that.stunServerUrl, turnServer: that.turnServer, maxAudioBW: spec.maxAudioBW, maxVideoBW: spec.maxVideoBW, limitMaxAudioBW:spec.maxAudioBW, limitMaxVideoBW: spec.maxVideoBW});
 
             stream.pc.onaddstream = function (evt) {
                 // Draw on html
@@ -412,13 +412,16 @@ Erizo.Room = function (spec) {
                                 sendDataSocket(stream, msg);
                             };
                         }
+                        stream.setAttributes = function (attrs) {
+                            updateAttributes(stream, attrs);
+                        };
                         that.localStreams[id] = stream;
                         stream.room = that;
 
                         stream.pc = Erizo.Connection({callback: function (message) {
                             console.log("Sending message", message);
                             sendSDPSocket('signaling_message', {streamId: stream.getID(), msg: message}, undefined, function () {});
-                        }, stunServerUrl: that.stunServerUrl, turnServer: that.turnServer, maxAudioBW: options.maxAudioBW, maxVideoBW: options.maxVideoBW, audio:stream.hasAudio(), video: stream.hasVideo()});
+                        }, stunServerUrl: that.stunServerUrl, turnServer: that.turnServer, maxAudioBW: options.maxAudioBW, maxVideoBW: options.maxVideoBW, limitMaxAudioBW: spec.maxAudioBW, limitMaxVideoBW: spec.maxVideoBW,audio:stream.hasAudio(), video: stream.hasVideo()});
                         
                         stream.pc.addStream(stream.stream);
                         stream.pc.createOffer();

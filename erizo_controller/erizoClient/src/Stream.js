@@ -21,6 +21,7 @@ Erizo.Stream = function (spec) {
     that.videoSize = spec.videoSize;
     that.videoOptions = spec.videoOptions || {mandatory: {}, optional: []};
     that.extensionId = spec.extensionId;
+
     if (that.videoSize !== undefined && (!(that.videoSize instanceof Array) || that.videoSize.length != 4)) {
         throw Error("Invalid Video Size");
     }
@@ -112,7 +113,8 @@ Erizo.Stream = function (spec) {
           }
       };
 
-    that.close = function () {
+
+     that.close = function () {
         if (that.local) {
             if (that.room !== undefined) {
                 that.room.unpublish(that);
@@ -209,6 +211,16 @@ Erizo.Stream = function (spec) {
             return null;
         }
     };
+
+    that.updateConfiguration = function (config, callback) {
+        if (config === undefined)
+            return;
+        if (that.pc){
+            that.pc.updateSpec(config, callback);
+        } else {
+            return ("This stream has not been published, ignoring");
+        }
+    }
 
     return that;
 };

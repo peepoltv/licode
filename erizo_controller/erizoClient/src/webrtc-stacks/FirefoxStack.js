@@ -82,8 +82,10 @@ Erizo.FirefoxStack = function (spec) {
             if (a == null){
               a = sdp.match(/m=video.*\n/);
             }
-            var r = a[0] + "b=AS:" + spec.maxVideoBW + "\r\n";
-            sdp = sdp.replace(a[0], r);
+            if (a && (a.length > 0)) {
+                var r = a[0] + "b=AS:" + spec.maxVideoBW + "\r\n";
+                sdp = sdp.replace(a[0], r);
+            }
         }
 
         if (spec.audio && spec.maxAudioBW) {
@@ -91,8 +93,10 @@ Erizo.FirefoxStack = function (spec) {
             if (a == null){
               a = sdp.match(/m=audio.*\n/);
             }
-            var r = a[0] + "b=AS:" + spec.maxAudioBW + "\r\n";
-            sdp = sdp.replace(a[0], r);
+            if (a && (a.length > 0)) {
+                var r = a[0] + "b=AS:" + spec.maxAudioBW + "\r\n";
+                sdp = sdp.replace(a[0], r);
+            }
         }
 
         return sdp;
@@ -103,8 +107,21 @@ Erizo.FirefoxStack = function (spec) {
     var setLocalDesc = function (sessionDescription) {
         sessionDescription.sdp = setMaxBW(sessionDescription.sdp);
         sessionDescription.sdp = sessionDescription.sdp.replace(/a=ice-options:google-ice\r\n/g, "");
+        sessionDescription = changeOrder(sessionDescription);
         spec.callback(sessionDescription);
         localDesc = sessionDescription;
+    }
+
+    var changeOrder = function(sessionDescription) {
+        var matches = sessionDescription.sdp.match(/^.*(rtcp-fb).*$/gm);
+        var lines = "";
+        for (var i in matches){
+            if (i == 0) lines += matches[i];
+            else lines += "\n\r" + matches[i];
+        }
+        sessionDescription.sdp = sessionDescription.sdp.replace(/^.*(rtcp-fb).*$\r\n/gm, "");
+        sessionDescription.sdp += lines;
+        return sessionDescription;
     }
 
     var setLocalDescp2p = function (sessionDescription) {
@@ -142,12 +159,14 @@ Erizo.FirefoxStack = function (spec) {
 
         if (msg.type === 'offer') {
             msg.sdp = setMaxBW(msg.sdp);
-            that.peerConnection.setRemoteDescription(new RTCSessionDescription(msg));
-            that.peerConnection.createAnswer(setLocalDescp2p, function(error){
+            that.peerConnection.setRemoteDescription(new RTCSessionDescription(msg), function(){
+                that.peerConnection.createAnswer(setLocalDescp2p, function(error){
                 L.Logger.error("Error", error);
             }, that.mediaConstraints);
-            spec.remoteDescriptionSet = true;
-
+                spec.remoteDescriptionSet = true;
+            }, function(error){
+              L.Logger.error("Error setting Remote Description", error)
+            });
         } else if (msg.type === 'answer') {
 
             // // For compatibility with only audio in Firefox Revisar
@@ -161,19 +180,22 @@ Erizo.FirefoxStack = function (spec) {
             msg.sdp = setMaxBW(msg.sdp);
 
             that.peerConnection.setLocalDescription(localDesc, function(){
-              that.peerConnection.setRemoteDescription(new RTCSessionDescription(msg), function() {
-                spec.remoteDescriptionSet = true;
-                while (spec.remoteCandidates.length > 0) {
-                // IMPORTANT: preserve ordering of candidates
-                  that.peerConnection.addIceCandidate(spec.remoteCandidates.shift());
-                }
-
-                while(spec.localCandidates.length > 0) {
-                  L.Logger.info("Sending Candidate");
-                  // IMPORTANT: preserve ordering of candidates
-                  spec.callback({type:'candidate', candidate: spec.localCandidates.shift()});
-                }
-              });
+                that.peerConnection.setRemoteDescription(new RTCSessionDescription(msg), function() {
+                    spec.remoteDescriptionSet = true;
+                    while (spec.remoteCandidates.length > 0) {
+                        // IMPORTANT: preserve ordering of candidates
+                        that.peerConnection.addIceCandidate(spec.remoteCandidates.shift());
+                    }
+                    while(spec.localCandidates.length > 0) {
+                        L.Logger.info("Sending Candidate");
+                        // IMPORTANT: preserve ordering of candidates
+                        spec.callback({type:'candidate', candidate: spec.localCandidates.shift()});
+                    }
+                }, function (error){
+                    L.Logger.error("Error Setting Remote Description", error);
+                });
+            },function(error){
+               L.Logger.error("Failure setting Local Description", error);
             });
 
         } else if (msg.type === 'candidate') {

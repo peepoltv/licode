@@ -46,12 +46,15 @@ Erizo.ChromeStableStack = function (spec) {
     
     var setMaxBW = function (sdp) {
         if (spec.video && spec.maxVideoBW) {
+            sdp = sdp.replace(/b=AS:.*\r\n/g, "");
             var a = sdp.match(/m=video.*\r\n/);
             if (a == null){
               a = sdp.match(/m=video.*\n/);
             }
-            var r = a[0] + "b=AS:" + spec.maxVideoBW + "\r\n";
-            sdp = sdp.replace(a[0], r);
+            if (a && (a.length > 0)) {
+                var r = a[0] + "b=AS:" + spec.maxVideoBW + "\r\n";
+                sdp = sdp.replace(a[0], r);
+            }
         }
 
         if (spec.audio && spec.maxAudioBW) {
@@ -59,8 +62,10 @@ Erizo.ChromeStableStack = function (spec) {
             if (a == null){
               a = sdp.match(/m=audio.*\n/);
             }
-            var r = a[0] + "b=AS:" + spec.maxAudioBW + "\r\n";
-            sdp = sdp.replace(a[0], r);
+            if (a && (a.length > 0)) {
+                var r = a[0] + "b=AS:" + spec.maxAudioBW + "\r\n";
+                sdp = sdp.replace(a[0], r);
+            }
         }
 
         return sdp;
@@ -83,10 +88,16 @@ Erizo.ChromeStableStack = function (spec) {
                 event.candidate.candidate ="a="+event.candidate.candidate;
             };
 
+            var candidateObject = {
+                sdpMLineIndex: event.candidate.sdpMLineIndex,
+                sdpMid: event.candidate.sdpMid,
+                candidate: event.candidate.candidate
+            };
+
             if (spec.remoteDescriptionSet) {
-                spec.callback({type:'candidate', candidate: event.candidate});
+                spec.callback({type:'candidate', candidate: candidateObject});
             } else {
-                spec.localCandidates.push(event.candidate);
+                spec.localCandidates.push(candidateObject);
                 console.log("Local Candidates stored: ", spec.localCandidates.length, spec.localCandidates);
             }
 
@@ -108,11 +119,15 @@ Erizo.ChromeStableStack = function (spec) {
     };
 
     var localDesc;
+    var remoteDesc;
 
     var setLocalDesc = function (sessionDescription) {
         sessionDescription.sdp = setMaxBW(sessionDescription.sdp);
         sessionDescription.sdp = sessionDescription.sdp.replace(/a=ice-options:google-ice\r\n/g, "");
-        spec.callback(sessionDescription);
+        spec.callback({
+            type: sessionDescription.type,
+            sdp: sessionDescription.sdp
+        });
         localDesc = sessionDescription;
         //that.peerConnection.setLocalDescription(sessionDescription);
     }
@@ -120,10 +135,44 @@ Erizo.ChromeStableStack = function (spec) {
     var setLocalDescp2p = function (sessionDescription) {
         sessionDescription.sdp = setMaxBW(sessionDescription.sdp);
         sessionDescription.sdp = sessionDescription.sdp.replace(/a=ice-options:google-ice\r\n/g, "");
-        spec.callback(sessionDescription);
+        spec.callback({
+            type: sessionDescription.type,
+            sdp: sessionDescription.sdp
+        });
         localDesc = sessionDescription;
         that.peerConnection.setLocalDescription(sessionDescription);
     }
+
+    that.updateSpec = function (config, callback){
+        if (config.maxVideoBW || config.maxAudioBW ){
+            if (config.maxVideoBW){
+                console.log ("Maxvideo Requested", config.maxVideoBW, "limit", spec.limitMaxVideoBW);
+                if (config.maxVideoBW > spec.limitMaxVideoBW) {
+                    config.maxVideoBW = spec.limitMaxVideoBW;
+                }
+                spec.maxVideoBW = config.maxVideoBW; 
+                console.log ("Result", spec.maxVideoBW);
+            }
+            if (config.maxAudioBW){
+                if (config.maxAudioBW > spec.limitMaxAudioBW) {
+                    config.maxAudioBW = spec.limitMaxAudioBW;
+                }
+                spec.maxAudioBW = config.maxAudioBW; 
+            }
+
+            localDesc.sdp = setMaxBW(localDesc.sdp);
+            that.peerConnection.setLocalDescription(localDesc, function(){
+                remoteDesc.sdp = setMaxBW(remoteDesc.sdp);
+                that.peerConnection.setRemoteDescription(new RTCSessionDescription(remoteDesc), function() {
+                    spec.remoteDescriptionSet = true;
+                    if (callback)
+                        callback("success");
+
+                });
+            });
+        }
+        
+    };
 
     that.createOffer = function (isSubscribe) {
       if (isSubscribe===true){
@@ -163,6 +212,7 @@ Erizo.ChromeStableStack = function (spec) {
 
             msg.sdp = setMaxBW(msg.sdp);
 
+            remoteDesc = msg;
             that.peerConnection.setLocalDescription(localDesc, function(){
               that.peerConnection.setRemoteDescription(new RTCSessionDescription(msg), function() {
                 spec.remoteDescriptionSet = true;
