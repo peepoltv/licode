@@ -251,8 +251,46 @@ Erizo.Room = function (spec) {
         });
     };
 
+    // Hijack SDP adding/removing features
+    function hijackChromeSdp(sdp) {
+      if (!sdp) {
+        console.log("WARN: SDP is `" + typeof sdp + "` and cannot be hijacked!");
+        return sdp;
+      } else {
+        console.log("hijacked SDP!");
+      }
+
+      var a = null;
+
+      /* bitrate */
+      console.log("Updating BitRate!");
+      if(a = sdp.match(/a=rtpmap:100 VP8\/90000.*\r\n/)) {
+        sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\r\na=fmtp:100 x-google-min-bitrate=800; x-google-max-bitrate=1200; x-google-max-quantization=56\r\n");
+      } else if (a = sdp.match(/a=rtpmap:100 VP8\/90000.*\n/)) {
+        sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\na=fmtp:100 x-google-min-bitrate=800; x-google-max-bitrate=1200; x-google-max-quantization=56\n");
+      }
+
+      /* remb */
+      console.log("Removing REMB!");
+      a = sdp.match(/a=rtcp-fb:100 goog-remb\r\n/);
+      if(!a) {
+        a = sdp.match(/a=rtcp-fb:100 goog-remb\n/);
+      }
+      if(a) {
+        sdp = sdp.replace(a[0], "");
+      }
+
+      return sdp;
+    }
+
     // It sends a SDP message to the server using socket.io
     sendSDPSocket = function (type, options, sdp, callback) {
+        // !!! Hijacking SDP
+        if (type == "signaling_message" && (typeof options == "object") &&
+            options.msg.type == "offer" && options.msg.sdp) {
+          options.msg.sdp = hijackChromeSdp(options.msg.sdp);
+        }
+
         that.socket.emit(type, options, sdp, function (response, respCallback) {
             if (callback !== undefined) {
                 callback(response, respCallback);

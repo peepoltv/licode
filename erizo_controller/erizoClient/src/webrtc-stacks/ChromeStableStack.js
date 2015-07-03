@@ -46,15 +46,6 @@ Erizo.ChromeStableStack = function (spec) {
     
     var setMaxBW = function (sdp) {
 
-        console.log("Removing REMB!");
-        var a = sdp.match(/a=rtcp-fb:100 goog-remb\r\n/);
-        if (a === null) {
-            a = sdp.match(/a=rtcp-fb:100 goog-remb\n/);
-        }
-        if (a) {
-            sdp = sdp.replace(a[0], "");
-        }
-
         if (spec.video && spec.maxVideoBW) {
             sdp = sdp.replace(/b=AS:.*\r\n/g, "");
             var a = sdp.match(/m=video.*\r\n/);
