@@ -265,9 +265,9 @@ Erizo.Room = function (spec) {
       /* bitrate */
       console.log("Updating BitRate!");
       if(a = sdp.match(/a=rtpmap:100 VP8\/90000.*\r\n/)) {
-        sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\r\na=fmtp:100 x-google-min-bitrate=800; x-google-max-bitrate=1200; x-google-max-quantization=56\r\n");
+        sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\r\na=fmtp:100 x-google-min-bitrate=300; x-google-max-bitrate=1200; x-google-max-quantization=56\r\n");
       } else if (a = sdp.match(/a=rtpmap:100 VP8\/90000.*\n/)) {
-        sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\na=fmtp:100 x-google-min-bitrate=800; x-google-max-bitrate=1200; x-google-max-quantization=56\n");
+        sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\na=fmtp:100 x-google-min-bitrate=300; x-google-max-bitrate=1200; x-google-max-quantization=56\n");
       }
 
       /* remb */
