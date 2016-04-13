@@ -5,7 +5,6 @@ var spawn = require('child_process').spawn;
 
 var config = require('./../../licode_config');
 
-
 // Configuration default values
 GLOBAL.config = config || {};
 GLOBAL.config.erizoAgent = GLOBAL.config.erizoAgent || {};
@@ -20,12 +19,16 @@ var getopt = new Getopt([
   ['r' , 'rabbit-host=ARG'            , 'RabbitMQ Host'],
   ['g' , 'rabbit-port=ARG'            , 'RabbitMQ Port'],
   ['l' , 'logging-config-file=ARG'    , 'Logging Config File'],
-  ['M' , 'maxProcesses=ARG'          , 'Stun Server URL'],
-  ['P' , 'prerunProcesses=ARG'         , 'Default video Bandwidth'],
+  ['b' , 'rabbit-heartbeat=ARG'       , 'RabbitMQ AMQP Heartbeat Timeout'],
+  ['M' , 'maxProcesses=ARG'           , 'Stun Server URL'],
+  ['P' , 'prerunProcesses=ARG'        , 'Default video Bandwidth'],
+  ['m' , 'metadata=ARG'               , 'JSON metadata'],
   ['h' , 'help'                       , 'display this help']
 ]);
 
 opt = getopt.parse(process.argv.slice(2));
+
+var metadata;
 
 for (var prop in opt.options) {
     if (opt.options.hasOwnProperty(prop)) {
@@ -43,10 +46,16 @@ for (var prop in opt.options) {
                 GLOBAL.config.rabbit = GLOBAL.config.rabbit || {};
                 GLOBAL.config.rabbit.port = value;
                 break;
+            case "rabbit-heartbeat":
+                GLOBAL.config.rabbit = GLOBAL.config.rabbit || {};
+                GLOBAL.config.rabbit.heartbeat = value;
+                break;
             case "logging-config-file":
                 GLOBAL.config.logger = GLOBAL.config.logger || {};
                 GLOBAL.config.logger.config_file = value;
                 break;
+            case "metadata":
+                metadata = JSON.parse(value);
             default:
                 GLOBAL.config.erizoAgent[prop] = value;
                 break;
@@ -83,6 +92,8 @@ var guid = (function() {
   };
 })();
 
+var my_erizo_agent_id = guid();
+
 var saveChild = function(id) {
     childs.push(id);
 };
@@ -92,7 +103,7 @@ var removeChild = function(id) {
 };
 
 var launchErizoJS = function() {
-    console.log("Running process");
+    log.info("Running process");
     var id = guid();
     var fs = require('fs');
     var out = fs.openSync('./erizo-' + id + '.log', 'a');
@@ -100,7 +111,7 @@ var launchErizoJS = function() {
     var erizoProcess = spawn('./launch.sh', ['./../erizoJS/erizoJS.js', id, privateIP, publicIP], { detached: true, stdio: [ 'ignore', out, err ] });
     erizoProcess.unref();
     erizoProcess.on('close', function (code) {
-
+        log.info("ErizoJS", id, " has closed");
         var index = idle_erizos.indexOf(id);
         var index2 = erizos.indexOf(id);
         if (index > -1) {
@@ -108,8 +119,23 @@ var launchErizoJS = function() {
         } else if (index2 > -1) {
             erizos.splice(index2, 1);
         }
+        if (out!=undefined){
+            fs.close(out, function (message){
+                if (message){
+                    log.error("Error while closing log file", message);
+                }
+            }
+            );
+        }
+        if(err!=undefined){
+            fs.close(err, function (message){
+                if (message){
+                    log.error("Error while closing log file", message);
+                }
+            });
+        }
         delete processes[id];
-        fillErizos();
+        fillErizos();       
     });
 
     log.info('Launched new ErizoJS ', id);
@@ -119,6 +145,7 @@ var launchErizoJS = function() {
 
 var dropErizoJS = function(erizo_id, callback) {
    if (processes.hasOwnProperty(erizo_id)) {
+      log.warn("Dropping Erizo that was not closed before, possible publisher/subscriber mismatch");
       var process = processes[erizo_id];
       process.kill();
       delete processes[erizo_id];
@@ -151,12 +178,15 @@ var getErizo = function () {
     return erizo_id;
 }
 
+// TODO: get metadata from a file
+var reporter = require('./erizoAgentReporter').Reporter({id: my_erizo_agent_id, metadata: metadata});
+
 var api = {
     createErizoJS: function(callback) {
         try {
 
-            var erizo_id = getErizo(); 
-            
+            var erizo_id = getErizo();
+            log.info('Get erizo JS', erizo_id);
             callback("callback", erizo_id);
 
             erizos.push(erizo_id);
@@ -172,7 +202,8 @@ var api = {
         } catch(err) {
             log.error("Error stopping ErizoJS");
         }
-    }
+    },
+    getErizoAgents: reporter.getErizoAgent
 };
 
 var interfaces = require('os').networkInterfaces(),
@@ -211,13 +242,13 @@ fillErizos();
 
 amqper.connect(function () {
     "use strict";
+
     amqper.setPublicRPC(api);
-
-    var rpcID = "ErizoAgent";
-    
-
-    amqper.bind(rpcID);
-
+    amqper.bind("ErizoAgent");
+    amqper.bind("ErizoAgent_" + my_erizo_agent_id);
+    amqper.bind_broadcast("ErizoAgent", function (m) {
+        log.warn('No method defined');
+    });
 });
 
 /*

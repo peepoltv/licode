@@ -4,7 +4,6 @@
 
 #include "WebRtcConnection.h"
 
-
 using namespace v8;
 
 WebRtcConnection::WebRtcConnection() {};
@@ -28,6 +27,9 @@ void WebRtcConnection::Init(Handle<Object> target) {
   tpl->PrototypeTemplate()->Set(String::NewSymbol("getCurrentState"), FunctionTemplate::New(getCurrentState)->GetFunction());
   tpl->PrototypeTemplate()->Set(String::NewSymbol("getStats"), FunctionTemplate::New(getStats)->GetFunction());
   tpl->PrototypeTemplate()->Set(String::NewSymbol("generatePLIPacket"), FunctionTemplate::New(generatePLIPacket)->GetFunction());
+  tpl->PrototypeTemplate()->Set(String::NewSymbol("setFeedbackReports"), FunctionTemplate::New(setFeedbackReports)->GetFunction());
+  tpl->PrototypeTemplate()->Set(String::NewSymbol("createOffer"), FunctionTemplate::New(createOffer)->GetFunction());
+  tpl->PrototypeTemplate()->Set(String::NewSymbol("setSlideShowMode"), FunctionTemplate::New(setSlideShowMode)->GetFunction());
 
   Persistent<Function> constructor = Persistent<Function>::New(tpl->GetFunction());
   target->Set(String::NewSymbol("WebRtcConnection"), constructor);
@@ -43,7 +45,7 @@ void WebRtcConnection::Init(Handle<Object> target) {
 
 Handle<Value> WebRtcConnection::New(const Arguments& args) {
   HandleScope scope;
-  if (args.Length()<4){
+  if (args.Length()<7){
     ThrowException(Exception::TypeError(String::New("Wrong number of arguments")));
     return args.This();
   }
@@ -57,8 +59,30 @@ Handle<Value> WebRtcConnection::New(const Arguments& args) {
   int minPort = args[4]->IntegerValue();
   int maxPort = args[5]->IntegerValue();
   bool t = (args[6]->ToBoolean())->BooleanValue();
+
+  erizo::IceConfig iceConfig;
+  if (args.Length()==11){
+    String::Utf8Value param2(args[7]->ToString());
+    std::string turnServer = std::string(*param2);
+    int turnPort = args[8]->IntegerValue();
+    String::Utf8Value param3(args[9]->ToString());
+    std::string turnUsername = std::string(*param3);
+    String::Utf8Value param4(args[10]->ToString());
+    std::string turnPass = std::string(*param4);
+    iceConfig.turnServer = turnServer;
+    iceConfig.turnPort = turnPort;
+    iceConfig.turnUsername = turnUsername;
+    iceConfig.turnPass = turnPass;
+  }
+
+
+  iceConfig.stunServer = stunServer;
+  iceConfig.stunPort = stunPort;
+  iceConfig.minPort = minPort;
+  iceConfig.maxPort = maxPort;
+
   WebRtcConnection* obj = new WebRtcConnection();
-  obj->me = new erizo::WebRtcConnection(a, v, stunServer,stunPort,minPort,maxPort,t, obj);
+  obj->me = new erizo::WebRtcConnection(a, v, iceConfig,t, obj);
   obj->Wrap(args.This());
   uv_async_init(uv_default_loop(), &obj->async_, &WebRtcConnection::eventsCallback); 
   uv_async_init(uv_default_loop(), &obj->asyncStats_, &WebRtcConnection::statsCallback); 
@@ -95,6 +119,28 @@ Handle<Value> WebRtcConnection::init(const Arguments& args) {
   bool r = me->init();
 
   return scope.Close(Boolean::New(r));
+}
+
+Handle<Value> WebRtcConnection::createOffer(const Arguments& args) {
+  HandleScope scope;
+
+  WebRtcConnection* obj = ObjectWrap::Unwrap<WebRtcConnection>(args.This());
+  erizo::WebRtcConnection *me = obj->me;
+  bool r = me->createOffer();
+
+  return scope.Close(Boolean::New(r));
+}
+
+Handle<Value> WebRtcConnection::setSlideShowMode(const v8::Arguments& args){
+  HandleScope scope;
+  
+  WebRtcConnection* obj = ObjectWrap::Unwrap<WebRtcConnection>(args.This());
+  erizo::WebRtcConnection *me = obj->me;
+  
+  bool v = (args[0]->ToBoolean())->BooleanValue();
+  me->setSlideShowMode(v);
+
+  return scope.Close(Null());
 }
 
 Handle<Value> WebRtcConnection::setRemoteSdp(const Arguments& args) {
@@ -203,8 +249,26 @@ Handle<Value> WebRtcConnection::generatePLIPacket(const v8::Arguments& args){
   HandleScope scope;
 
   WebRtcConnection* obj = ObjectWrap::Unwrap<WebRtcConnection>(args.This());
+
+  if(obj->me ==NULL){
+    return scope.Close(Null());
+  }
+
   erizo::WebRtcConnection *me = obj->me;
   me->sendPLI();
+
+  return scope.Close(Null());
+}
+
+Handle<Value> WebRtcConnection::setFeedbackReports(const v8::Arguments& args){
+  HandleScope scope;
+  
+  WebRtcConnection* obj = ObjectWrap::Unwrap<WebRtcConnection>(args.This());
+  erizo::WebRtcConnection *me = obj->me;
+  
+  bool v = (args[0]->ToBoolean())->BooleanValue();
+  int fbreps = args[1]->IntegerValue(); // From bps to Kbps
+  me->setFeedbackReports(v, fbreps);
 
   return scope.Close(Null());
 }

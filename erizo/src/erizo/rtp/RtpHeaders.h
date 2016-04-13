@@ -63,7 +63,7 @@ namespace erizo{
     public:
       static const int MIN_SIZE = 12;
       uint32_t cc :4;
-      uint32_t extension :1;
+      uint32_t hasextension :1;
       uint32_t padding :1;
       uint32_t version :2;
       uint32_t payloadtype :7;
@@ -73,9 +73,17 @@ namespace erizo{
       uint32_t ssrc;
       uint32_t extensionpayload:16;
       uint32_t extensionlength:16;
+      union extension_t {
+
+        struct absSendTime_t{
+          uint32_t abssendtime;
+        } absSendTime;
+
+      } extension;
+
 
       inline RtpHeader() :
-        cc(0), extension(0), padding(0), version(2), payloadtype(0), marker(
+        cc(0), hasextension(0), padding(0), version(2), payloadtype(0), marker(
             0), seqnum(0), timestamp(0), ssrc(0), extensionpayload(0), extensionlength(0) {
           // No implementation required
       }
@@ -97,10 +105,16 @@ namespace erizo{
         marker = aMarker;
       }
       inline uint8_t getExtension() const {
-        return extension;
+        return hasextension;
       }
       inline void setExtension(uint8_t ext) {
-        extension = ext;
+        hasextension = ext;
+      }
+      inline uint8_t getCc() const {
+        return cc;
+      }
+      inline void setCc (uint8_t theCc){
+        cc = theCc;
       }
       inline uint8_t getPayloadType() const {
         return payloadtype;
@@ -138,8 +152,14 @@ namespace erizo{
       inline void setExtLength(uint16_t extensionLength) {
         extensionlength = htons(extensionLength);
       }
+      inline uint32_t getAbsSendTime() {
+        return ntohl(extension.absSendTime.abssendtime);
+      }
+      inline void setAbsSendTime(uint32_t aTime) {
+        extension.absSendTime.abssendtime = htonl(aTime);
+      }
       inline int getHeaderLength() {
-        return MIN_SIZE + cc * 4 + extension * (4 + ntohs(extensionlength) * 4);
+        return MIN_SIZE + cc * 4 + hasextension * (4 + ntohs(extensionlength) * 4);
       }
   };
 
@@ -245,7 +265,8 @@ namespace erizo{
           /* RECEIVER REPORT DATA*/
           uint32_t fractionlost:8;
           int32_t lost:24;
-          uint32_t highestseqnum;
+          uint32_t seqnumcycles:16;
+          uint32_t highestseqnum:16;
           uint32_t jitter;
           uint32_t lastsr;
           uint32_t delaysincelast;
@@ -266,17 +287,15 @@ namespace erizo{
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         struct genericNack_t{
           uint32_t ssrcsource;
-          uint16_t pid;
-          uint16_t blp;
+          uint32_t pid:16;
+          uint32_t blp:16;
         } nackPacket;
         
         struct remb_t{
           uint32_t ssrcsource;
           uint32_t uniqueid;
           uint32_t numssrc:8;
-
           uint32_t brLength :24;
-         
           uint32_t ssrcfeedb;
 
         } rembPacket;
@@ -322,8 +341,8 @@ namespace erizo{
       inline uint32_t getSSRC(){
         return ntohl(ssrc);
       }
-      inline void setSSRC(uint32_t ssrc){
-        ssrc = htonl(ssrc);
+      inline void setSSRC(uint32_t aSsrc){
+        ssrc = htonl(aSsrc);
       }
       inline uint32_t getSourceSSRC(){
         return ntohl(report.receiverReport.ssrcsource);
@@ -340,23 +359,63 @@ namespace erizo{
       inline uint32_t getLostPackets() {
         return ntohl(report.receiverReport.lost)>>8;
       }
-      inline uint32_t getHighestSeqnum() {
-        return ntohl(report.receiverReport.highestseqnum);
+      inline void setLostPackets(uint32_t lost) {
+        report.receiverReport.lost = htonl(lost)>>8;
+      }
+      inline uint16_t getSeqnumCycles() {
+        return ntohs(report.receiverReport.seqnumcycles);
+      }
+      inline void setSeqnumCycles(uint16_t seqnumcycles) {
+        report.receiverReport.seqnumcycles = htons(seqnumcycles);
+      }
+      inline uint16_t getHighestSeqnum() {
+        return ntohs(report.receiverReport.highestseqnum);
+      }
+      inline void setHighestSeqnum(uint16_t highest) {
+        report.receiverReport.highestseqnum = htons(highest);
       }
       inline uint32_t getJitter() {
         return ntohl(report.receiverReport.jitter);
       }
+      inline void setJitter(uint32_t jitter) {
+        report.receiverReport.jitter = htonl(jitter);
+      }
+      inline uint32_t getLastSr(){
+        return ntohl(report.receiverReport.lastsr);
+      }
+      inline void setLastSr(uint32_t lastsr) {
+        report.receiverReport.lastsr = htonl(lastsr);
+      }
+      inline uint32_t getDelaySinceLastSr(){
+        return ntohl (report.receiverReport.delaysincelast);
+      }
+      inline void setDelaySinceLastSr(uint32_t delaylastsr) {
+        report.receiverReport.delaysincelast = htonl(delaylastsr);
+      }
+
       inline uint32_t getPacketsSent(){
         return ntohl(report.senderReport.packetsent);
       }
+      inline void setPacketsSent(uint32_t packetssent){
+        report.senderReport.packetsent = htonl(packetssent);
+      }
       inline uint32_t getOctetsSent(){
         return ntohl(report.senderReport.octetssent);
+      }      
+      inline uint64_t getNtpTimestamp(){
+       return (((uint64_t)htonl(report.senderReport.ntptimestamp)) << 32) + htonl(report.senderReport.ntptimestamp >> 32);
       }
-      uint16_t getNackPid(){
+      inline uint16_t getNackPid(){
         return ntohs(report.nackPacket.pid);
       }
-      uint16_t getNackBlp(){
+      inline void setNackPid(uint16_t pid){
+        report.nackPacket.pid = htons(pid);
+      }
+      inline uint16_t getNackBlp(){
         return ntohs(report.nackPacket.blp);
+      }
+      inline void setNackBlp(uint16_t blp){
+        report.nackPacket.blp = htons(blp);
       }
       inline void setREMBBitRate(uint64_t bitRate){
         uint64_t max = 0x3FFFF; // 18 bits
@@ -379,8 +438,17 @@ namespace erizo{
       inline uint32_t getBrMantis(){        
         return (ntohl(report.rembPacket.brLength)>>8 & 0x3ffff);
       }
-      inline uint8_t getNumSSRC(){
+      inline uint8_t getREMBNumSSRC(){
         return report.rembPacket.numssrc;
+      }
+      inline void setREMBNumSSRC(uint8_t num){
+        report.rembPacket.numssrc = num;
+      }
+      inline uint32_t getREMBFeedSSRC(){
+        return ntohl(report.rembPacket.ssrcfeedb);
+      }
+      inline void setREMBFeedSSRC(uint32_t ssrc){
+         report.rembPacket.ssrcfeedb = htonl(ssrc);
       }
       inline uint32_t getFCI(){
         return ntohl(report.pli.fci);

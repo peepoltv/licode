@@ -192,6 +192,7 @@ public:
 
     bool supportPayloadType(const int payloadType);
 
+    void createOfferSdp(bool videoEnabled, bool audioEnabled);
     /**
      * @brief copies relevant information from the offer sdp for which this will be an answer sdp
      * @param offerSdp The offer SDP as received via signaling and parsed
@@ -251,6 +252,7 @@ public:
     int videoSdpMLine;
     int audioSdpMLine;
     int videoCodecs, audioCodecs;
+    unsigned int videoBandwidth;
 
 private:
     bool processSdp(const std::string& sdp, const std::string& media);

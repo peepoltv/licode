@@ -10,8 +10,8 @@ var express = require('express'),
         config = require('./../../licode_config');
 
 var options = {
-    key: fs.readFileSync('cert/key.pem').toString(),
-    cert: fs.readFileSync('cert/cert.pem').toString()
+    key: fs.readFileSync('../../cert/key.pem').toString(),
+    cert: fs.readFileSync('../../cert/cert.pem').toString()
 };
 
 var app = express();
@@ -83,6 +83,9 @@ app.post('/createToken/', function(req, res) {
     N.API.createToken(room, username, role, function(token) {
         console.log(token);
         res.send(token);
+    }, function(error) {
+        console.log(error);
+        res.status(401).send('No Erizo Controller found');
     });
 });
 

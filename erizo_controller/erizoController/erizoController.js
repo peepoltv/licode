@@ -2,9 +2,6 @@
 var crypto = require('crypto');
 var rpcPublic = require('./rpc/rpcPublic');
 var ST = require('./Stream');
-var http = require('http');
-var server = http.createServer();
-var io = require('socket.io').listen(server, {log:false});
 var config = require('./../../licode_config');
 var Permission = require('./permission');
 var Getopt = require('node-getopt');
@@ -12,7 +9,7 @@ var Getopt = require('node-getopt');
 // Configuration default values
 GLOBAL.config = config || {};
 GLOBAL.config.erizoController = GLOBAL.config.erizoController || {};
-GLOBAL.config.erizoController.stunServerUrl = GLOBAL.config.erizoController.stunServerUrl || 'stun:stun.l.google.com:19302';
+GLOBAL.config.erizoController.iceServers = GLOBAL.config.erizoController.iceServers || [{'url': 'stun:stun.l.google.com:19302'}];
 GLOBAL.config.erizoController.defaultVideoBW = GLOBAL.config.erizoController.defaultVideoBW || 300;
 GLOBAL.config.erizoController.defaultAudioBW = GLOBAL.config.erizoController.defaultAudioBW || 64;
 GLOBAL.config.erizoController.maxVideoBW = GLOBAL.config.erizoController.maxVideoBW || 300;
@@ -21,12 +18,9 @@ GLOBAL.config.erizoController.publicIP = GLOBAL.config.erizoController.publicIP 
 GLOBAL.config.erizoController.hostname = GLOBAL.config.erizoController.hostname|| '';
 GLOBAL.config.erizoController.port = GLOBAL.config.erizoController.port || 8080;
 GLOBAL.config.erizoController.ssl = GLOBAL.config.erizoController.ssl || false;
+GLOBAL.config.erizoController.listen_port = GLOBAL.config.erizoController.listen_port || 8080;
+GLOBAL.config.erizoController.listen_ssl = GLOBAL.config.erizoController.listen_ssl || false;
 GLOBAL.config.erizoController.turnServer = GLOBAL.config.erizoController.turnServer || undefined;
-if (config.erizoController.turnServer !== undefined) {
-    GLOBAL.config.erizoController.turnServer.url = GLOBAL.config.erizoController.turnServer.url || '';
-    GLOBAL.config.erizoController.turnServer.username = GLOBAL.config.erizoController.turnServer.username || '';
-    GLOBAL.config.erizoController.turnServer.password = GLOBAL.config.erizoController.turnServer.password || '';
-}
 GLOBAL.config.erizoController.warning_n_rooms = GLOBAL.config.erizoController.warning_n_rooms || 15;
 GLOBAL.config.erizoController.limit_n_rooms = GLOBAL.config.erizoController.limit_n_rooms || 20;
 GLOBAL.config.erizoController.interval_time_keepAlive = GLOBAL.config.erizoController.interval_time_keepAlive || 1000;
@@ -38,19 +32,19 @@ GLOBAL.config.erizoController.roles = GLOBAL.config.erizoController.roles || {"p
 var getopt = new Getopt([
   ['r' , 'rabbit-host=ARG'            , 'RabbitMQ Host'],
   ['g' , 'rabbit-port=ARG'            , 'RabbitMQ Port'],
+  ['b' , 'rabbit-heartbeat=ARG'       , 'RabbitMQ AMQP Heartbeat Timeout'],
   ['l' , 'logging-config-file=ARG'    , 'Logging Config File'],
-  ['t' , 'stunServerUrl=ARG'          , 'Stun Server URL'],
+  ['t' , 'iceServers=ARG'             , 'Ice Servers URLs Array'],
   ['b' , 'defaultVideoBW=ARG'         , 'Default video Bandwidth'],
   ['a' , 'defaultAudioBW=ARG'         , 'Default audio Bandwidth'],
   ['M' , 'maxVideoBW=ARG'             , 'Max video bandwidth'],
   ['A' , 'maxAudioBW=ARG'             , 'Max audio bandwidth'],
   ['i' , 'publicIP=ARG'               , 'Erizo Controller\'s public IP'],
   ['H' , 'hostname=ARG'               , 'Erizo Controller\'s hostname'],
-  ['p' , 'port'                       , 'Port where Erizo Controller will listen to new connections.'],
-  ['S' , 'ssl'                        , 'Erizo Controller\'s hostname'],
-  ['T' , 'turn-url'                   , 'Turn server\'s URL.'],
-  ['U' , 'turn-username'              , 'Turn server\'s username.'],
-  ['P' , 'turn-password'              , 'Turn server\'s password.'],
+  ['p' , 'port'                       , 'Port used by clients to reach Erizo Controller'],
+  ['S' , 'ssl'                        , 'Enable SSL for clients'],
+  ['L' , 'listen_port'                , 'Port where Erizo Controller will listen to new connections.'],
+  ['s' , 'listen_ssl'                 , 'Enable HTTPS in server'],
   ['R' , 'recording_path'             , 'Recording path.'],
   ['h' , 'help'                       , 'display this help']
 ]);
@@ -76,6 +70,10 @@ for (var prop in opt.options) {
                 GLOBAL.config.rabbit = GLOBAL.config.rabbit || {};
                 GLOBAL.config.rabbit.port = value;
                 break;
+            case "rabbit-heartbeat":
+                GLOBAL.config.rabbit = GLOBAL.config.rabbit || {};
+                GLOBAL.config.rabbit.heartbeat = value;
+                break;
             case "logging-config-file":
                 GLOBAL.config.logger = GLOBAL.config.logger || {};
                 GLOBAL.config.logger.config_file = value;
@@ -91,11 +89,28 @@ for (var prop in opt.options) {
 var logger = require('./../common/logger').logger;
 var amqper = require('./../common/amqper');
 var controller = require('./roomController');
+var ecch = require('./ecch').Ecch({amqper: amqper});
 
 // Logger
 var log = logger.getLogger("ErizoController");
 
-server.listen(8080);
+var server;
+
+if (GLOBAL.config.erizoController.listen_ssl) {
+    var https = require('https');
+    var fs = require('fs');
+    var options = {
+        key: fs.readFileSync('../../cert/key.pem').toString(),
+        cert: fs.readFileSync('../../cert/cert.pem').toString()
+    };
+    server = https.createServer(options);
+} else {
+    var http = require('http');
+    server = http.createServer();
+}
+
+server.listen(GLOBAL.config.erizoController.listen_port);
+var io = require('socket.io').listen(server, {log:false});
 
 io.set('log level', 0);
 
@@ -187,6 +202,7 @@ var addToCloudHandler = function (callback) {
 
     var addECToCloudHandler = function(attempt) {
         if (attempt <= 0) {
+            log.error('FATAL:CloudHandler does not respond when trying to add myself to the pool. Won\'t retry again!');
             return;
         }
 
@@ -200,7 +216,7 @@ var addToCloudHandler = function (callback) {
         amqper.callRpc('nuve', 'addNewErizoController', controller, {callback: function (msg) {
 
             if (msg === 'timeout') {
-                log.info('CloudHandler does not respond');
+                log.warn('CloudHandler does not respond when trying to add myself to the pool... Retrying');
 
                 // We'll try it more!
                 setTimeout(function() {
@@ -210,8 +226,11 @@ var addToCloudHandler = function (callback) {
                 return;
             }
             if (msg == 'error') {
-                log.info('Error in communication with cloudProvider');
+                log.error('Error in communication with CloudHandler');
+                return;
             }
+
+            log.info("Succesfully added myself to a CloudHandler pool");
 
             publicIP = msg.publicIP;
             myId = msg.id;
@@ -223,7 +242,7 @@ var addToCloudHandler = function (callback) {
                     if (result === 'whoareyou') {
 
                         // TODO: It should try to register again in Cloud Handler. But taking into account current rooms, users, ...
-                        log.info('I don`t exist in cloudHandler. I`m going to be killed');
+                        log.error('This ErizoController does not exist in ClouldHandler.To avoid unexpected behavior this ErizoController will die');
                         clearInterval(intervarId);
                         amqper.callRpc('nuve', 'killMe', publicIP, {callback: function () {}});
                     }
@@ -261,8 +280,10 @@ var updateMyState = function () {
     if (nRooms < WARNING_N_ROOMS) {
         newState = 2;
     } else if (nRooms > LIMIT_N_ROOMS) {
+        log.warn("Room Limit", LIMIT_N_ROOMS,"reached no new rooms will be assigned to this ErizoController");
         newState = 0;
     } else {
+        log.warn("Room Warning number", WARNING_N_ROOMS," this ErizoController will accept more rooms until it reaches", LIMIT_N_ROOMS);
         newState = 1;
     }
 
@@ -280,7 +301,7 @@ var listen = function () {
     "use strict";
 
     io.sockets.on('connection', function (socket) {
-        log.info("Socket connect ", socket.id);
+        log.info("New ErizoClient connected ", socket.id);
 
         // Gets 'token' messages on the socket. Checks the signature and ask nuve if it is valid.
         // Then registers it in the room and callback to the client.
@@ -294,12 +315,12 @@ var listen = function () {
 
                 amqper.callRpc('nuve', 'deleteToken', token.tokenId, {callback: function (resp) {
                     if (resp === 'error') {
-                        log.info('Token does not exist');
+                        log.warn('Trying to use token that does not exist, disconnecting Client');
                         callback('error', 'Token does not exist');
                         socket.disconnect();
 
                     } else if (resp === 'timeout') {
-                        log.warn('Nuve does not respond');
+                        log.warn('Nuve does not respond token check, disconnecting client');
                         callback('error', 'Nuve does not respond');
                         socket.disconnect();
 
@@ -313,10 +334,10 @@ var listen = function () {
                             room.sockets.push(socket.id);
                             room.streams = {}; //streamId: Stream
                             if (tokenDB.p2p) {
-                                log.debug('Token of p2p room');
+                                log.debug('Token for p2p room');
                                 room.p2p = true;
                             } else {
-                                room.controller = controller.RoomController({amqper: amqper});
+                                room.controller = controller.RoomController({amqper: amqper, ecch: ecch});
                                 room.controller.addEventListener(function(type, event) {
                                     // TODO Send message to room? Handle ErizoJS disconnection.
                                     if (type === "unpublish") {
@@ -356,7 +377,7 @@ var listen = function () {
                         socket.streams = []; //[list of streamIds]
                         socket.state = 'sleeping';
 
-                        log.debug('OK, Valid token');
+                        log.debug('Client supplied a valid token');
 
                         if (!tokenDB.p2p && GLOBAL.config.erizoController.report.session_events) {
                             var timeStamp = new Date();
@@ -379,18 +400,19 @@ var listen = function () {
                                             maxVideoBW: GLOBAL.config.erizoController.maxVideoBW,
                                             maxAudioBW: GLOBAL.config.erizoController.maxAudioBW,
                                             stunServerUrl: GLOBAL.config.erizoController.stunServerUrl,
-                                            turnServer: GLOBAL.config.erizoController.turnServer
+                                            turnServer: GLOBAL.config.erizoController.turnServer,
+                                            iceServers: GLOBAL.config.erizoController.iceServers
                                             });
 
                     } else {
-                        log.warn('Invalid host');
+                        log.warn('Token does not contain this host: Invalid host');
                         callback('error', 'Invalid host');
                         socket.disconnect();
                     }
                 }});
 
             } else {
-                log.warn("Authentication error");
+                log.warn("Token authentication error");
                 callback('error', 'Authentication error');
                 socket.disconnect();
             }
@@ -474,9 +496,9 @@ var listen = function () {
                     }
                 });
             } else if (options.state === 'erizo') {
-                log.info("New publisher");
+                log.info("New publisher for id", id, "from client", socket.id);
                 
-                socket.room.controller.addPublisher(id, function (signMess) {
+                socket.room.controller.addPublisher(id, options, function (signMess) {
 
                     if (signMess.type === 'initializing') {
                         callback(id);
@@ -491,8 +513,8 @@ var listen = function () {
                         }
                         return;
                     } else if (signMess.type ==='failed'){
-                        log.info("IceConnection Failed on publisher, removing " , id);
-                        socket.emit('connection_failed',{});
+                        log.warn("IceConnection Failed on publisher, removing " , id);
+                        socket.emit('connection_failed',{type:'publish'});
                         socket.state = 'sleeping';
                         if (!socket.room.p2p) {
                             socket.room.controller.removePublisher(id);
@@ -510,8 +532,19 @@ var listen = function () {
                     } else if (signMess.type === 'ready') {
                         st.status = PUBLISHER_READY;
                         sendMsgToRoom(socket.room, 'onAddStream', st.getPublicStream());
-                    } else if (signMess === 'timeout') {
-                        callback(undefined, 'No ErizoAgents available');
+                        log.info("Publisher", id, "from client", socket.id, "is now ready");
+                    } else if (signMess === 'timeout-erizojs') {
+                        log.error("Error Trying to add Publisher: timeout when contacting ErizoJS");
+                        callback(null, 'ErizoJS is not reachable');
+                        return;
+                    } else if (signMess === 'timeout-agent'){
+                        log.error("Error Trying to add Publisher: timeout when contacting Agent");
+                        callback(null, 'ErizoAgent is not reachable');
+                        return;
+                    } else if (signMess === 'timeout'){
+                        log.error("Undefined RPC Timeout");
+                        callback(null, 'ErizoAgent or ErizoJS is not reachable');
+                        return;
                     }
 
                     socket.emit('signaling_message_erizo', {mess: signMess, streamId: id});
@@ -561,9 +594,8 @@ var listen = function () {
 
                 } else {
                     socket.room.controller.addSubscriber(socket.id, options.streamId, options, function (signMess) {
-
                         if (signMess.type === 'initializing') {
-                            log.info("Initializing subscriber");
+                            log.info("Initializing subscriber from",socket.id, "to", options.streamId);
                             callback(true);
 
                             if (GLOBAL.config.erizoController.report.session_events) {
@@ -571,15 +603,25 @@ var listen = function () {
                                 amqper.broadcast('event', {room: socket.room.id, user: socket.id, name: socket.user.name, type: 'subscribe', stream: options.streamId, timestamp: timeStamp.getTime()});
                             }
                             return;
-                        }
+                        } else if (signMess.type ==='failed'){
+                            //TODO: Add Stats event
+                            log.warn("IceConnection Failed on subscriber" , socket.id , "alerting client");
+                            socket.emit('connection_failed',{type:"subscribe"});
+                            return;
+                        } else if (signMess.type === 'ready') {
+                            log.info("Subscriber from client", socket.id, "to stream", options.streamId, "is now ready");
 
-                        // if (signMess.type === 'candidate') {
-                        //     signMess.candidate = signMess.candidate.replace(privateRegexp, publicIP);
-                        // }
+                        } else if (signMess.type === 'bandwidthAlert') {
+                            socket.emit('onBandwidthAlert', {streamID:options.streamId, message:signMess.message, bandwidth: signMess.bandwidth});
+                        } else if (signMess === 'timeout') {
+                            log.error("Error Trying to add Subscriber: timeout when contacting ErizoJS", options.streamId);
+                            callback(null, 'ErizoJS is not reachable');
+                            return;
+                        } 
+
                         socket.emit('signaling_message_erizo', {mess: signMess, peerId: options.streamId});
                     });
-
-                    log.info("Subscriber added");
+                    log.info("Started Subscribe to ", options.streamId, "from",socket.id);
                 }
             } else {
                 callback(true);
@@ -612,7 +654,7 @@ var listen = function () {
                         log.info("erizoController.js: Recorder Started");
                         callback(recordingId);
                     } else {
-                        callback(null, 'This stream is not published in this room');
+                        callback(null, 'Unable to subscribe to stream for recording, publisher not present');
                     }
                 });
 
@@ -768,7 +810,7 @@ var listen = function () {
 
 
 /*
- *Gets a list of users in a determined room.
+ *Gets a list of users in a given room.
  */
 exports.getUsersInRoom = function (room, callback) {
     "use strict";
@@ -791,7 +833,7 @@ exports.getUsersInRoom = function (room, callback) {
 };
 
 /*
- *Gets a list of users in a determined room.
+ *Remove user from a room.
  */
 exports.deleteUser = function (user, room, callback) {
     "use strict";
@@ -835,7 +877,7 @@ exports.deleteUser = function (user, room, callback) {
 
 
 /*
- * Delete a determined room.
+ * Delete a room.
  */
 exports.deleteRoom = function (room, callback) {
     "use strict";

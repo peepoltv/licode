@@ -12,8 +12,8 @@ Erizo.Connection = function (spec) {
 
     // Check which WebRTC Stack is installed.
     that.browser = Erizo.getBrowser();
-    if (typeof module !== 'undefined' && module.exports) {
-        L.Logger.error('Publish/subscribe video/audio streams not supported in erizofc yet');
+    if (that.browser === 'fake') {
+        L.Logger.warn('Publish/subscribe video/audio streams not supported in erizofc yet');
         that = Erizo.FcStack(spec);
     } else if (that.browser === 'mozilla') {
         L.Logger.debug("Firefox Stack");
@@ -22,10 +22,10 @@ Erizo.Connection = function (spec) {
         L.Logger.debug("Bowser Stack");
         that = Erizo.BowserStack(spec); 
     } else if (that.browser === 'chrome-stable') {
-        L.Logger.debug("Stable!");
+        L.Logger.debug("Chrome Stable Stack");
         that = Erizo.ChromeStableStack(spec);
     } else {
-        L.Logger.debug("None!");
+        L.Logger.error("No stack available for this browser");
         throw "WebRTC stack not available";
     }
     if (!that.updateSpec){
@@ -44,7 +44,9 @@ Erizo.getBrowser = function () {
 
     var browser = "none";
 
-    if (window.navigator.userAgent.match("Firefox") !== null) {
+    if (typeof module!=='undefined' && module.exports){
+        browser = "fake";
+    }else if (window.navigator.userAgent.match("Firefox") !== null) {
         // Firefox
         browser = "mozilla";
     } else if (window.navigator.userAgent.match("Bowser") !==null){
@@ -77,7 +79,7 @@ Erizo.GetUserMedia = function (config, callback, error) {
             case "mozilla":
                 L.Logger.debug("Screen sharing in Firefox");
                 var theConfig = {};
-                if(config.video!= undefined){
+                if(config.video.mandatory != undefined){
                     theConfig.video = config.video;
                     theConfig.video.mediaSource = 'window' || 'screen';
                 }else{
@@ -99,7 +101,7 @@ Erizo.GetUserMedia = function (config, callback, error) {
                     chrome.runtime.sendMessage(extensionId,{getStream:true}, function (response){
                         var theConfig = {};
                         if (response==undefined){
-                            L.Logger.debug("Access to screen denied");
+                            L.Logger.error("Access to screen denied");
                             var theError = {code:"Access to screen denied"};
                             error(theError);
                             return;
@@ -116,14 +118,14 @@ Erizo.GetUserMedia = function (config, callback, error) {
                         navigator.getMedia(theConfig,callback,error);
                     });
                 } catch (e){
-                    L.Logger.debug("Lynckia screensharing plugin is not accessible ");
+                    L.Logger.debug("Screensharing plugin is not accessible ");
                     var theError = {code:"no_plugin_present"};
                     error(theError);
                     return;
                 }
                 break;
             default:
-                L.Logger.debug("This browser does not support screenSharing");
+                L.Logger.error("This browser does not support ScreenSharing");
         }
     } else {
       if (typeof module !== 'undefined' && module.exports) {
