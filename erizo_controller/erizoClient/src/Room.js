@@ -294,14 +294,18 @@ Erizo.Room = function (spec) {
       }
 
       /* remb */
-      console.log("Removing REMB!");
-      a = sdp.match(/a=rtcp-fb:100 goog-remb\r\n/);
-      if(!a) {
-        a = sdp.match(/a=rtcp-fb:100 goog-remb\n/);
+      var removeRemb = function (codec) {
+        console.log("Removing REMB for codec:" + codec);
+        a = sdp.match("a=rtcp-fb:"+ codec + " goog-remb\r\n");
+        if(!a) {
+          a = sdp.match("a=rtcp-fb:"+ codec + " goog-remb\n");
+        }
+        if(a) {
+          sdp = sdp.replace(a[0], "");
+        }
       }
-      if(a) {
-        sdp = sdp.replace(a[0], "");
-      }
+      removeRemb(100);
+      removeRemb(101);
 
       return sdp;
     }
