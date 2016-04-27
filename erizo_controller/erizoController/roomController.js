@@ -37,7 +37,7 @@ exports.RoomController = function (spec) {
                 erizos[erizo_id].ka_count ++;
 
                 if (erizos[erizo_id].ka_count > TIMEOUT_LIMIT) {
-                    if (erizos[erizo_id].publishers > 0){
+                    if (erizos[erizo_id].publishers.length > 0){
                         log.error("Lost connection with ErizoJS", erizo_id,"will remove publishers", erizos[erizo_id].publishers);
                         for (var p in erizos[erizo_id].publishers) {
                             dispatchEvent("unpublish", erizos[erizo_id].publishers[p]);
@@ -245,7 +245,7 @@ exports.RoomController = function (spec) {
                     log.error("Can not contact to ErizoJS", getErizoQueue(publisher_id) , " failed add Subscriber", subscriber_id," -- timeout");
                     callback('timeout');
                     return;
-                }else if (data === 'initializing'){
+                }else if (data.type === 'initializing'){
                     subscribers[publisher_id].push(subscriber_id);
                 }
                 callback(data);
@@ -268,7 +268,7 @@ exports.RoomController = function (spec) {
                 var index = erizos[publishers[publisher_id]].publishers.indexOf(publisher_id);
                 erizos[publishers[publisher_id]].publishers.splice(index, 1);
             }else{
-                L.Logger.warn("Trying to update erizoJS corresponding to ", publisher_id, "but was already removed");
+                log.warn("Trying to update erizoJS corresponding to ", publisher_id, "but was already removed");
             }
             
             delete subscribers[publisher_id];
