@@ -292,6 +292,11 @@ Erizo.Room = function (spec) {
       } else if (a = sdp.match(/a=rtpmap:100 VP8\/90000.*\n/)) {
         sdp = sdp.replace(a[0], "a=rtpmap:100 VP8/90000\na=fmtp:100 x-google-min-bitrate=300; x-google-max-bitrate=1200; x-google-max-quantization=56\n");
       }
+      if(a = sdp.match(/a=rtpmap:101 VP9\/90000.*\r\n/)) {
+        sdp = sdp.replace(a[0], "a=rtpmap:101 VP9/90000\r\na=fmtp:101 x-google-min-bitrate=300; x-google-max-bitrate=1200; x-google-max-quantization=56\r\n");
+      } else if (a = sdp.match(/a=rtpmap:101 VP9\/90000.*\n/)) {
+        sdp = sdp.replace(a[0], "a=rtpmap:101 VP9/90000\na=fmtp:101 x-google-min-bitrate=300; x-google-max-bitrate=1200; x-google-max-quantization=56\n");
+      }
 
       /* remb */
       var removeRemb = function (codec) {
