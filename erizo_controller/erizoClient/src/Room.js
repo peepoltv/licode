@@ -110,7 +110,7 @@ Erizo.Room = function (spec) {
     // It connects to the server through socket.io
     connectSocket = function (token, callback, error) {
         // Once we have connected
-        that.socket = io.connect(token.host, {reconnect: false, secure: token.secure, 'force new connection': true});
+        that.socket = io.connect(token.host, {reconnect: false, secure: token.secure, 'force new connection': true, transports: ['websocket']});
 
         // We receive an event with a new stream in the room.
         // type can be "media" or "data"
@@ -242,16 +242,28 @@ Erizo.Room = function (spec) {
 
         that.socket.on('connection_failed', function(arg){
             if (arg.type === 'publish'){
-                L.Logger.error("ICE Connection Failed on publishing, disconnecting");
-                if (that.state !== DISCONNECTED) {
-                    var disconnectEvt = Erizo.RoomEvent({type: "stream-failed", message:"Publishing local stream failed ICE Checks, disconnecting client"});
-                    that.dispatchEvent(disconnectEvt);
+                L.Logger.error("ICE Connection Failed on publishing stream", arg.streamId);
+                if (that.state !== DISCONNECTED ) {
+                    if(arg.streamId){
+                        var stream = that.localStreams[arg.id];
+                        if (stream && !stream.failed) {
+                            stream.failed = true;
+                            var disconnectEvt = Erizo.StreamEvent({type: "stream-failed", msg:"Publishing local stream failed ICE Checks", stream:stream});
+                            that.dispatchEvent(disconnectEvt);
+                        }
+                    }
                 }
             }else{
                 L.Logger.error("ICE Connection Failed on subscribe, alerting");
                 if (that.state !== DISCONNECTED) {
-                    var disconnectEvt = Erizo.RoomEvent({type: "stream-failed", message:"Subscriber failed the ICE Checks, cannot reach Licode for media"});
-                    that.dispatchEvent(disconnectEvt);
+                    if(arg.streamId){
+                        var stream = remoteStreams[arg.streamId];
+                        if (stream && !stream.failed) {
+                            stream.failed = true;
+                            var disconnectEvt = Erizo.StreamEvent({type: "stream-failed", msg:"Subscriber failed the ICE Checks, cannot reach Licode for media", stream:stream});
+                            that.dispatchEvent(disconnectEvt);
+                        }
+                    }
                 }
             }
         });
@@ -437,7 +449,8 @@ Erizo.Room = function (spec) {
                     }
                     L.Logger.info("Checking publish options for", stream.getID());
                     stream.checkOptions(options);
-                    sendSDPSocket('publish', {state: type, data: stream.hasData(), audio: stream.hasAudio(), video: stream.hasVideo(), attributes: stream.getAttributes(), createOffer: options.createOffer}, arg, function (id, error) {
+                    sendSDPSocket('publish', {state: type, data: stream.hasData(), audio: stream.hasAudio(), video: stream.hasVideo(), 
+                        attributes: stream.getAttributes(), createOffer: options.createOffer}, arg, function (id, error) {
 
                         if (id !== null) {
                             L.Logger.info('Stream published');
@@ -492,7 +505,9 @@ Erizo.Room = function (spec) {
 
                 } else {
                     L.Logger.info("Publishing to Erizo Normally, is createOffer", options.createOffer);
-                    sendSDPSocket('publish', {state: 'erizo', data: stream.hasData(), audio: stream.hasAudio(), video: stream.hasVideo(), screen: stream.hasScreen(), minVideoBW: options.minVideoBW, attributes: stream.getAttributes(), createOffer: options.createOffer}, undefined, function (id, error) {
+                    sendSDPSocket('publish', {state: 'erizo', data: stream.hasData(), audio: stream.hasAudio(), video: stream.hasVideo(), 
+                        screen: stream.hasScreen(), minVideoBW: options.minVideoBW, attributes: stream.getAttributes(), 
+                        createOffer: options.createOffer, scheme: options.scheme}, undefined, function (id, error) {
 
                         if (id === null) {
                             L.Logger.error('Error when publishing the stream: ', error);
@@ -522,6 +537,16 @@ Erizo.Room = function (spec) {
                         }, iceServers: that.iceServers, maxAudioBW: options.maxAudioBW, maxVideoBW: options.maxVideoBW, limitMaxAudioBW: spec.maxAudioBW, limitMaxVideoBW: spec.maxVideoBW,audio:stream.hasAudio(), video: stream.hasVideo()});
                         
                         stream.pc.addStream(stream.stream);
+                        stream.pc.oniceconnectionstatechange = function (state) {
+                            if (state === 'failed') {
+                                if (that.state !== DISCONNECTED && !stream.failed) {
+                                    L.Logger.warning("Stream", stream.getID(), "has failed after succesfuly ICE checks");
+                                    var disconnectEvt = Erizo.StreamEvent({type: "stream-failed", msg:"Publishing stream failed after connection", stream:stream });
+                                    that.dispatchEvent(disconnectEvt);
+                                    that.unpublish(stream);
+                                }
+                            }
+                        };
                         if(!options.createOffer)
                             stream.pc.createOffer();
                         if(callback) callback(id);
@@ -664,6 +689,15 @@ Erizo.Room = function (spec) {
                             stream.stream = evt.stream;
                             var evt2 = Erizo.StreamEvent({type: 'stream-subscribed', stream: stream});
                             that.dispatchEvent(evt2);
+                        };
+                        
+                        stream.pc.oniceconnectionstatechange = function (state) {
+                            if (state === 'failed') {
+                                if (that.state !== DISCONNECTED) {
+                                    var disconnectEvt = Erizo.StreamEvent({type: "stream-failed", msg:"Subscribing stream failed after connection", stream:stream });
+                                    that.dispatchEvent(disconnectEvt);
+                                }
+                            }
                         };
                         
                         stream.pc.createOffer(true);

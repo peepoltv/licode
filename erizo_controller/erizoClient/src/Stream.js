@@ -32,7 +32,15 @@ Erizo.Stream = function (spec) {
     // Public functions
 
     that.getID = function () {
-        return spec.streamID;
+        var id;
+        // Unpublished local streams don't yet have an ID.
+        if (that.local && !spec.streamID) {
+            id = 'local';
+        }
+        else {
+            id = spec.streamID;
+        }
+        return id;
     };
 
     // Get attributes of this stream.
@@ -254,10 +262,15 @@ Erizo.Stream = function (spec) {
             return;
         if (that.pc){
             that.checkOptions(config, true);
-            if(that.room.p2p){
-                for (var index in that.pc){
-                    that.pc[index].updateSpec(config, callback);
+            if (that.local){
+                if(that.room.p2p){ 
+                    for (var index in that.pc){
+                        that.pc[index].updateSpec(config, callback);
+                    }
+                }else{
+                    that.pc.updateSpec(config, callback);
                 }
+
             }else{
                 that.pc.updateSpec(config, callback);
             }

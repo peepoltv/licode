@@ -11,6 +11,7 @@ GLOBAL.config.erizoAgent = GLOBAL.config.erizoAgent || {};
 GLOBAL.config.erizoAgent.maxProcesses = GLOBAL.config.erizoAgent.maxProcesses || 1;
 GLOBAL.config.erizoAgent.prerunProcesses = GLOBAL.config.erizoAgent.prerunProcesses === undefined ? 1 : GLOBAL.config.erizoAgent.prerunProcesses;
 GLOBAL.config.erizoAgent.publicIP = GLOBAL.config.erizoAgent.publicIP || '';
+GLOBAL.config.erizoAgent.instanceLogDir = GLOBAL.config.erizoAgent.instanceLogDir || '.';
 
 var BINDED_INTERFACE_NAME = GLOBAL.config.erizoAgent.networkInterface;
 
@@ -106,8 +107,8 @@ var launchErizoJS = function() {
     log.info("Launching a new ErizoJS process");
     var id = guid();
     var fs = require('fs');
-    var out = fs.openSync('./erizo-' + id + '.log', 'a');
-    var err = fs.openSync('./erizo-' + id + '.log', 'a');
+    var out = fs.openSync(GLOBAL.config.erizoAgent.instanceLogDir + '/erizo-' + id + '.log', 'a');
+    var err = fs.openSync(GLOBAL.config.erizoAgent.instanceLogDir + '/erizo-' + id + '.log', 'a');
     var erizoProcess = spawn('./launch.sh', ['./../erizoJS/erizoJS.js', id, privateIP, publicIP], { detached: true, stdio: [ 'ignore', out, err ] });
     erizoProcess.unref();
     erizoProcess.on('close', function (code) {
@@ -196,7 +197,7 @@ var api = {
 
             var erizo_id = getErizo();
             log.info('Get erizo JS', erizo_id);
-            callback("callback", erizo_id);
+            callback("callback", {erizo_id: erizo_id, agent_id: my_erizo_agent_id});
 
             erizos.push(erizo_id);
             fillErizos();
