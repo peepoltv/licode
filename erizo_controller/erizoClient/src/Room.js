@@ -342,7 +342,8 @@ Erizo.Room = function (spec) {
         // !!! Hijacking SDP
         if (type == "signaling_message" && (typeof options == "object") &&
             options.msg.type == "offer" && options.msg.sdp) {
-          options.msg.sdp = hijackChromeSdp(options.msg.sdp);
+          //options.msg.sdp = hijackChromeSdp(options.msg.sdp);
+          options.msg.sdp = options.msg.sdp;
         }
 
         that.socket.emit(type, options, sdp, function (response, respCallback) {
