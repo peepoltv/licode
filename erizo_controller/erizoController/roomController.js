@@ -24,7 +24,7 @@ exports.RoomController = function (spec) {
 
     var KEEPALIVE_INTERVAL = 5*1000;
     var TIMEOUT_LIMIT = 2;
-    var MAX_ERIZOJS_RETRIES = 1;
+    var MAX_ERIZOJS_RETRIES = 0;
 
     var eventListeners = [];
 
@@ -42,8 +42,9 @@ exports.RoomController = function (spec) {
                         for (var p in erizos[erizo_id].publishers) {
                             dispatchEvent("unpublish", erizos[erizo_id].publishers[p]);
                         }
+
                     } else {
-                        log.warn("ErizoJS", erizo_id, "is empty and does not respond, removing");
+                        log.debug("ErizoJS", erizo_id, "is empty and does not respond, removing");
                     }
                     ecch.deleteErizoJS(erizo_id);
                     delete erizos[erizo_id];
@@ -169,7 +170,7 @@ exports.RoomController = function (spec) {
 
         if (publishers[publisher_id] === undefined) {
 
-            log.info("Adding publisher peer_id ", publisher_id, "options", options);;
+            log.info("Adding publisher peer_id ", publisher_id, "options", JSON.stringify(options));;
 
             // We create a new ErizoJS with the publisher_id.
             getErizoJS(function(erizo_id, agent_id) {
@@ -230,14 +231,19 @@ exports.RoomController = function (spec) {
             retries = 0;
 
         if (publishers[publisher_id] !== undefined && subscribers[publisher_id].indexOf(subscriber_id) === -1) {
-            log.info("Adding subscriber ", subscriber_id, ' to publisher ', publisher_id, "options", options);
+            log.info("Adding subscriber ", subscriber_id, ' to publisher ', publisher_id, "options", JSON.stringify(options));
 
             if (options.audio === undefined) options.audio = true;
             if (options.video === undefined) options.video = true;
 
             var args = [subscriber_id, publisher_id, options];
-            //TODO: Potential problem here if erizoJS is not reachable
+            
             amqper.callRpc(getErizoQueue(publisher_id, undefined), "addSubscriber", args, {callback: function (data){
+                if (!publishers[publisher_id] && !subscribers[publisher_id]){
+                    log.warn("addSubscriber rpc callback has arrived after", publisher_id, "was removed, we'll notify the clients");
+                    callback('timeout');
+                    return;
+                }
                 if (data === 'timeout'){
                     if (retries < MAX_ERIZOJS_RETRIES){
                         retries++;
@@ -245,7 +251,7 @@ exports.RoomController = function (spec) {
                         that.addSubscriber(subscriber_id, publisher_id, options, callback, retries);
                         return;
                     }
-                    log.error("Can not contact to ErizoJS", getErizoQueue(publisher_id) , " failed add Subscriber", subscriber_id," -- timeout");
+                    log.error("Can not contact ErizoJS", getErizoQueue(publisher_id) , " failed add Subscriber", subscriber_id," -- timeout");
                     callback('timeout');
                     return;
                 }else if (data.type === 'initializing'){
@@ -284,15 +290,18 @@ exports.RoomController = function (spec) {
      * Removes a subscriber from the room. This also removes it from the associated OneToManyProcessor.
      */
     that.removeSubscriber = function (subscriber_id, publisher_id) {
+        if(subscribers[publisher_id]!==undefined){
+            var index = subscribers[publisher_id].indexOf(subscriber_id);
+            if (index !== -1) {
+                log.info('Removing subscriber ', subscriber_id, 'from muxer ', publisher_id);
 
-        var index = subscribers[publisher_id].indexOf(subscriber_id);
-        if (index !== -1) {
-            log.info('Removing subscriber ', subscriber_id, 'to muxer ', publisher_id);
+                var args = [subscriber_id, publisher_id];
+                amqper.callRpc(getErizoQueue(publisher_id), "removeSubscriber", args, undefined);
 
-            var args = [subscriber_id, publisher_id];
-            amqper.callRpc(getErizoQueue(publisher_id), "removeSubscriber", args, undefined);
-
-            subscribers[publisher_id].splice(index, 1);
+                subscribers[publisher_id].splice(index, 1);
+            }
+        } else {
+            log.warn("Trying to remove subscriber", subscriber_id, "from publisher", publisher_id,"but was not found.");
         }
     };
 

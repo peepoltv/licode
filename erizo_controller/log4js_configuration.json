@@ -10,9 +10,14 @@
     }
   ],
   "levels": {
+  	"AMQPER": "ERROR",
   	"ErizoController": "DEBUG",
-  	"AMQPER": "INFO",
-    "ErizoJS": "DEBUG", 
-    "ErizoJSController": "DEBUG"
+    "ErizoJS": "INFO", 
+    "ErizoJSController": "INFO",
+    "ErizoAgent": "INFO",
+    "ErizoAgentReporter": "ERROR",
+    "Ecch": "INFO",
+    "RoomController": "DEBUG",
+    "RPCPublic":"ERROR"
   }
 }

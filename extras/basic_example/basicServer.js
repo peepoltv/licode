@@ -29,6 +29,12 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
     extended: true
 }));
+app.use(function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
 
 //app.set('views', __dirname + '/../views/');
 //disable layout
@@ -36,28 +42,71 @@ app.use(bodyParser.urlencoded({
 
 N.API.init(config.nuve.superserviceID, config.nuve.superserviceKey, 'http://localhost:3000/');
 
-var myRoom;
+var defaultRoom;
+var defaultRoomName = "basicExampleRoom";
 
-N.API.getRooms(function(roomlist) {
-    "use strict";
-    var rooms = JSON.parse(roomlist);
-    console.log(rooms.length); //check and see if one of these rooms is 'basicExampleRoom'
-    for (var room in rooms) {
-        if (rooms[room].name === 'basicExampleRoom'){
-            myRoom = rooms[room]._id;
+var getOrCreateRoom = function (roomName, callback) {
+
+    if (roomName == defaultRoomName && defaultRoom) {
+        callback(defaultRoom);
+        return;
+    }
+
+    N.API.getRooms(function (roomlist){
+        "use strict";
+        var theRoom = "";
+        var rooms = JSON.parse(roomlist);
+        for (var room in rooms) {
+            if (rooms[room].name === roomName && rooms[room].data && rooms[room].data.basicExampleRoom){
+                theRoom = rooms[room]._id;
+                callback(theRoom);
+                return;
+            }
         }
+        N.API.createRoom(roomName, function (roomID) {
+            theRoom = roomID._id;
+            callback(theRoom);
+        }, function(){}, {data: {basicExampleRoom:true}});
+    });
+};
+var deleteRoomsIfEmpty = function (theRooms, callback) {
+    if (theRooms.length == 0){
+        callback(true);
+        return;
     }
-    if (!myRoom) {
+    var theRoom = theRooms.pop()
+    N.API.getUsers(theRoom._id, function(userlist){
+        var users = JSON.parse(userlist);
+        if (Object.keys(users).length === 0){
+            N.API.deleteRoom(theRoom._id, function(res){
+                if (theRooms.length > 0){
+                    deleteRoomsIfEmpty(theRooms, callback);
+                }
+            });
+        } else {
+            if (theRooms.length > 0){
+                deleteRoomsIfEmpty(theRooms, callback);
+            }
+        }
+    });
+}
 
-        N.API.createRoom('basicExampleRoom', function(roomID) {
-            myRoom = roomID._id;
-            console.log('Created room ', myRoom);
+var cleanExampleRooms = function (callback) {
+    N.API.getRooms(function (roomlist) {
+        "use strict";
+        var rooms = JSON.parse(roomlist);
+        var roomsToCheck = [];
+        for (var room in rooms){
+            if (rooms[room].data && rooms[room].data.basicExampleRoom && rooms[room].name !== defaultRoomName){
+                roomsToCheck.push(rooms[room]);
+            }
+        }
+        deleteRoomsIfEmpty (roomsToCheck, function (res) {
+            callback("done");
         });
-    } else {
-        console.log('Using room', myRoom);
-    }
-});
+    });
 
+}
 
 app.get('/getRooms/', function(req, res) {
     "use strict";
@@ -77,15 +126,22 @@ app.get('/getUsers/:room', function(req, res) {
 
 app.post('/createToken/', function(req, res) {
     "use strict";
-    var room = myRoom,
-        username = req.body.username,
-        role = req.body.role;
-    N.API.createToken(room, username, role, function(token) {
-        console.log(token);
-        res.send(token);
-    }, function(error) {
-        console.log(error);
-        res.status(401).send('No Erizo Controller found');
+    console.log(req.body);
+    var room = defaultRoomName;
+    if (req.body.room && !isNaN(req.body.room))
+        room = req.body.room
+
+    var username = req.body.username,
+    role = req.body.role;
+
+    getOrCreateRoom(room, function (roomId) {
+        N.API.createToken(roomId, username, role, function(token) {
+            console.log(token);
+            res.send(token);
+        }, function(error) {
+            console.log(error);
+            res.status(401).send('No Erizo Controller found');
+        });
     });
 });
 
@@ -102,9 +158,13 @@ app.use(function(req, res, next) {
     }
 });
 
+cleanExampleRooms(function(res) {
+    getOrCreateRoom(defaultRoomName, function (roomId) {
+        defaultRoom = roomId;
+        app.listen(3001);
+        var server = https.createServer(options, app);
+        console.log("BasicExample started");
+        server.listen(3004);
 
-
-app.listen(3001);
-
-var server = https.createServer(options, app);
-server.listen(3004);
+    });
+});

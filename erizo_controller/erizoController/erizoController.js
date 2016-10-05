@@ -341,11 +341,11 @@ var listen = function () {
                             } else {
                                 room.controller = controller.RoomController({amqper: amqper, ecch: ecch});
                                 room.controller.addEventListener(function(type, event) {
-                                    // TODO Send message to room? Handle ErizoJS disconnection.
                                     if (type === "unpublish") {
                                         var streamId = parseInt(event); // It's supposed to be an integer.
-                                        log.info("ErizoJS stopped", streamId);
+                                        log.warn("ErizoJS --- notifying stream", streamId, "is removed");
                                         sendMsgToRoom(room, 'onRemoveStream', {id: streamId});
+                                        /*
                                         room.controller.removePublisher(streamId);
 
                                         for (var s in room.sockets) {
@@ -359,6 +359,7 @@ var listen = function () {
                                         if (room.streams[streamId]) {
                                             delete room.streams[streamId];
                                         }
+                                        */
                                     }
 
                                 });
@@ -515,9 +516,11 @@ var listen = function () {
                         }
                         return;
                     } else if (signMess.type ==='failed'){
-                        log.warn("IceConnection Failed on publisher, removing " , id);
+                        log.warn("IceConnection Failed on publisher " , id, "alerting clients");
                         socket.emit('connection_failed',{type:'publish', streamId: id});
-                        socket.state = 'sleeping';
+                        //We're going to let the client disconnect let the client do it
+                        
+                        /* 
                         if (!socket.room.p2p) {
                             socket.room.controller.removePublisher(id);
                             if (GLOBAL.config.erizoController.report.session_events) {
@@ -526,10 +529,14 @@ var listen = function () {
                             }
                         }
 
+                        //We assume it does not have subscribers because, for now libnice will ONLY fail on establishment
+                        //TODO: If we upgrade libnice check if this is true and also notify subscribers
+
                         var index = socket.streams.indexOf(id);
                         if (index !== -1) {
                             socket.streams.splice(index, 1);
                         }
+                        */
                         return;
                     } else if (signMess.type === 'ready') {
                         st.status = PUBLISHER_READY;
