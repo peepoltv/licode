@@ -1,20 +1,20 @@
-/*global exports, require, console*/
+/*global exports, require*/
+'use strict';
 var serviceRegistry = require('./../mdb/serviceRegistry');
 var logger = require('./../logger').logger;
 
 // Logger
-var log = logger.getLogger("ServiceResource");
+var log = logger.getLogger('ServiceResource');
 
 /*
- * Gets the service and checks if it is superservice. Only superservice can do actions about services.
+ * Gets the service and checks if it is superservice.
+ * Only superservice can do actions about services.
  */
 var doInit = function (serv, callback) {
-    "use strict";
-
     var service = require('./../auth/nuveAuthenticator').service,
         superService = require('./../mdb/dataBase').superService;
 
-    service._id = service._id + '';    
+    service._id = service._id + '';
     if (service._id !== superService) {
         callback('error');
     } else {
@@ -28,11 +28,10 @@ var doInit = function (serv, callback) {
  * Get Service. Represents a determined service.
  */
 exports.represent = function (req, res) {
-    "use strict";
-
     doInit(req.params.service, function (serv) {
         if (serv === 'error') {
-            log.info('Service ', req.params.service, ' not authorized for this action');
+            log.info('message: represent service - not authorized, serviceId: ' + 
+                req.params.service);
             res.send('Service not authorized for this action', 401);
             return;
         }
@@ -49,11 +48,9 @@ exports.represent = function (req, res) {
  * Delete Service. Removes a determined service from the data base.
  */
 exports.deleteService = function (req, res) {
-    "use strict";
-
     doInit(req.params.service, function (serv) {
         if (serv === 'error') {
-            log.info('Service ', req.params.service, ' not authorized for this action');
+            log.info('message: deleteService - not authorized, serviceId: ' + req.params.service);
             res.send('Service not authorized for this action', 401);
             return;
         }
@@ -64,7 +61,7 @@ exports.deleteService = function (req, res) {
         var id = '';
         id += serv._id;
         serviceRegistry.removeService(id);
-        log.info('Serveice ', id, ' deleted');
+        log.info('message: deleteService success, serviceId: ' + id);
         res.send('Service deleted');
     });
 };

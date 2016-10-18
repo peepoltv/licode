@@ -1,12 +1,12 @@
-/*global exports, require, console, Buffer, setTimeout, clearTimeout*/
-var sys = require('util');
+/*global exports, require, setTimeout, clearTimeout*/
+'use strict';
 var amqp = require('amqp');
 var rpcPublic = require('./rpcPublic');
 var config = require('./../../../licode_config');
 var logger = require('./../logger').logger;
 
 // Logger
-var log = logger.getLogger("RPC");
+var log = logger.getLogger('RPC');
 
 // Configuration default values
 config.rabbit = config.rabbit || {};
@@ -40,23 +40,22 @@ exports.connect = function () {
     connection = amqp.createConnection(addr);
 
     connection.on('ready', function () {
-        "use strict";
+        log.info('message: AMQP connected');
 
-        log.info('Conected to rabbitMQ server');
-
-        //Create a direct exchange 
+        //Create a direct exchange
         exc = connection.exchange('rpcExchange', {type: 'direct'}, function (exchange) {
-            log.info('Exchange ' + exchange.name + ' is open');
+            log.info('message: rpcExchange open, exchangeName: ' + exchange.name);
 
             //Create the queue for receive messages
             var q = connection.queue('nuveQueue', function (queue) {
-                log.info('Queue ' + queue.name + ' is open');
+                log.info('message: queue open, queueName: ' + queue.name);
 
                 q.bind('rpcExchange', 'nuve');
                 q.subscribe(function (message) {
 
                     rpcPublic[message.method](message.args, function (type, result) {
-                        exc.publish(message.replyTo, {data: result, corrID: message.corrID, type: type});
+                        exc.publish(message.replyTo,
+                                    {data: result, corrID: message.corrID, type: type});
                     });
 
                 });
@@ -64,7 +63,7 @@ exports.connect = function () {
 
             //Create the queue for send messages
             clientQueue = connection.queue('', function (q) {
-                log.info('ClientQueue ' + q.name + ' is open');
+                log.info('message: clientQueue open, queueName: ' + q.name);
 
                 clientQueue.bind('rpcExchange', clientQueue.name);
 
@@ -82,15 +81,15 @@ exports.connect = function () {
         });
 
     });
-   
+
     connection.on('error', function(e) {
-       log.error('Connection error...', e, " killing process.");
+       log.error('message: AMQP connection error killing process, errorMsg: ' + 
+           logger.objectToLog(e));
        process.exit(1);
     });
-}
+};
 
 var callbackError = function (corrID) {
-    "use strict";
     for (var i in map[corrID].fn) {
         map[corrID].fn[i]('timeout');
     }
@@ -101,8 +100,6 @@ var callbackError = function (corrID) {
  * Calls remotely the 'method' function defined in rpcPublic of 'to'.
  */
 exports.callRpc = function (to, method, args, callbacks) {
-    "use strict";
-
     corrID += 1;
     map[corrID] = {};
     map[corrID].fn = callbacks;
@@ -113,4 +110,3 @@ exports.callRpc = function (to, method, args, callbacks) {
     exc.publish(to, send);
 
 };
-
