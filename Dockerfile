@@ -7,7 +7,7 @@ ARG BRANCH
 WORKDIR /opt/licode
 
 ADD . .
-RUN ./scripts/installUbuntuDepsUnattended.sh --cleanup
+RUN ./scripts/installUbuntuDeps.sh --cleanup
 RUN ./nuve/installNuve.sh
 RUN ./scripts/installErizo.sh
 
