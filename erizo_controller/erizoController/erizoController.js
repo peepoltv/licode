@@ -34,7 +34,8 @@ GLOBAL.config.erizoController.interval_time_keepAlive =
   GLOBAL.config.erizoController.interval_time_keepAlive || 1000;
 GLOBAL.config.erizoController.report.session_events =
   GLOBAL.config.erizoController.report.session_events || false;
-GLOBAL.config.erizoController.recording_path = GLOBAL.config.erizoController.recording_path || undefined;
+GLOBAL.config.erizoController.recording_path =
+  GLOBAL.config.erizoController.recording_path || undefined;
 // jshint ignore:end
 GLOBAL.config.erizoController.roles = GLOBAL.config.erizoController.roles ||
                   {'presenter': {'publish': true, 'subscribe': true, 'record': true},
@@ -104,7 +105,7 @@ for (var prop in opt.options) {
 var logger = require('./../common/logger').logger;
 var amqper = require('./../common/amqper');
 var controller = require('./roomController');
-var ecch = require('./ecch').Ecch({amqper: amqper});
+var ecch = require('./ecCloudHandler').EcCloudHandler({amqper: amqper});
 
 // Logger
 var log = logger.getLogger('ErizoController');
@@ -322,7 +323,6 @@ var listen = function () {
             //log.debug("New token", token);
 
             var tokenDB, user, streamList = [], index;
-
             if (checkSignature(token, nuveKey)) {
 
                 amqper.callRpc('nuve', 'deleteToken', token.tokenId, {callback: function (resp) {
@@ -532,7 +532,9 @@ var listen = function () {
                 });
             } else if (options.state === 'erizo') {
                 log.info('message: addPublisher requested, ' +
-                         'streamId: ' + id + ', clientId: ' + socket.id);
+                         'streamId: ' + id + ', clientId: ' + socket.id + ', ' +
+                         logger.objectToLog(options) + ', ' +
+                         logger.objectToLog(options.attributes));
                 socket.room.controller.addPublisher(id, options, function (signMess) {
 
                     if (signMess.type === 'initializing') {
@@ -559,7 +561,8 @@ var listen = function () {
                                                        type: 'publish',
                                                        stream: id,
                                                        timestamp: timeStamp.getTime(),
-                                                       agent: signMess.agentId});
+                                                       agent: signMess.agentId,
+                                                       attributes: options.attributes});
                         }
                         return;
                     } else if (signMess.type === 'failed'){
@@ -754,6 +757,10 @@ var listen = function () {
                      'streamId: ' + streamId + ', ' +
                      'url: ' + url);
 
+            if (socket.room.p2p) {
+               callback(null, 'Stream can not be recorded');
+            }
+
             if (socket.room.streams[streamId].hasAudio() ||
                 socket.room.streams[streamId].hasVideo() ||
                 socket.room.streams[streamId].hasScreen()) {
@@ -857,8 +864,8 @@ var listen = function () {
         // remove a subscriber from a determined stream (to).
         // Returns callback(result, error)
         socket.on('unsubscribe', function (to, callback) {
-            if (!socket.user.permissions[Permission.SUBSCRIBE]) {
-                if (callback) callback(null, 'unauthorized');
+            if (socket.user === undefined || !socket.user.permissions[Permission.SUBSCRIBE]) {
+                if (callback) callback(null, 'Unauthorized');
                 return;
             }
             if (socket.room.streams[to] === undefined) {
@@ -990,11 +997,10 @@ exports.getUsersInRoom = function (room, callback) {
 exports.deleteUser = function (user, room, callback) {
     var sockets, id;
 
-     if (rooms[room] === undefined) {
-         callback('Success');
-         return;
-     }
-
+    if (rooms[room] === undefined) {
+       callback('Success');
+       return;
+    }
     sockets = rooms[room].sockets;
     var socketsToDelete = [];
 
@@ -1042,7 +1048,7 @@ exports.deleteRoom = function (room, callback) {
 
     for (id in sockets) {
         if (sockets.hasOwnProperty(id)) {
-            rooms[room].roomController.removeSubscriptions(sockets[id]);
+            rooms[room].controller.removeSubscriptions(sockets[id]);
         }
     }
 
@@ -1051,7 +1057,7 @@ exports.deleteRoom = function (room, callback) {
     for (j in streams) {
         if (streams[j].hasAudio() || streams[j].hasVideo() || streams[j].hasScreen()) {
             if (!room.p2p) {
-                rooms[room].roomController.removePublisher(j);
+                rooms[room].controller.removePublisher(j);
             }
         }
     }
