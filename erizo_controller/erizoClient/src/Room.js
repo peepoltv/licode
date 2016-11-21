@@ -514,6 +514,7 @@ Erizo.Room = function (spec) {
                                               audio: stream.hasAudio(),
                                               video: stream.hasVideo(),
                                               attributes: stream.getAttributes(),
+                                              metadata: options.metadata,
                                               createOffer: options.createOffer},
                                   arg, function (id, error) {
 
@@ -550,6 +551,7 @@ Erizo.Room = function (spec) {
                                               audio: stream.hasAudio(),
                                               video: stream.hasVideo(),
                                               screen: stream.hasScreen(),
+                                              metadata: options.metadata,
                                               attributes: stream.getAttributes()},
                                   undefined, function (id, error) {
                         if (id === null) {
@@ -585,6 +587,7 @@ Erizo.Room = function (spec) {
                                               minVideoBW: options.minVideoBW,
                                               attributes: stream.getAttributes(),
                                               createOffer: options.createOffer,
+                                              metadata: options.metadata,
                                               scheme: options.scheme},
                                   undefined, function (id, error) {
 
@@ -653,6 +656,7 @@ Erizo.Room = function (spec) {
                                           audio: false,
                                           video: false,
                                           screen: false,
+                                          metadata: options.metadata,
                                           attributes: stream.getAttributes()},
                               undefined,
                               function (id, error) {
@@ -775,7 +779,8 @@ Erizo.Room = function (spec) {
                 // 1- Subscribe to Stream
 
                 if (that.p2p) {
-                    sendSDPSocket('subscribe', {streamId: stream.getID()});
+                    sendSDPSocket('subscribe', {streamId: stream.getID(),
+                                                metadata: options.metadata});
                     if(callback) callback(true);
                 } else {
                     L.Logger.info('Checking subscribe options for', stream.getID());
@@ -786,6 +791,7 @@ Erizo.Room = function (spec) {
                                                 data: options.data,
                                                 browser: Erizo.getBrowser(),
                                                 createOffer: options.createOffer,
+                                                metadata: options.metadata,
                                                 slideShowMode: options.slideShowMode},
                                   undefined, function (result, error) {
                             if (result === null) {
@@ -842,7 +848,9 @@ Erizo.Room = function (spec) {
                 }
             } else if (stream.hasData() && options.data !== false) {
                 sendSDPSocket('subscribe',
-                              {streamId: stream.getID(), data: options.data},
+                              {streamId: stream.getID(),
+                               data: options.data,
+                               metadata: options.metadata},
                               undefined, function (result, error) {
                     if (result === null) {
                         L.Logger.error('Error subscribing to stream ', error);

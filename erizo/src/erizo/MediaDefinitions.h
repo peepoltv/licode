@@ -17,10 +17,16 @@ enum packetType {
 };
 
 struct dataPacket {
-    int comp;
-    char data[1500];
-    int length;
-    packetType type;
+  dataPacket() = default;
+  dataPacket(int comp_, char *data_, int length_, packetType type_, uint16_t seq_num_) :
+    comp{comp_}, length{length_}, type{type_}, seq_num{seq_num_} {
+      memcpy(data, data_, length_);
+    }
+  int comp;
+  char data[1500];
+  int length;
+  packetType type;
+  uint16_t seq_num;
 };
 
 class Monitor {
@@ -89,6 +95,8 @@ class MediaSink: public virtual Monitor {
     MediaSink() : audioSinkSSRC_(0), videoSinkSSRC_(0), sinkfbSource_(NULL) {}
     virtual ~MediaSink() {}
 
+    virtual void close() = 0;
+
  private:
     virtual int deliverAudioData_(char* buf, int len) = 0;
     virtual int deliverVideoData_(char* buf, int len) = 0;
@@ -139,6 +147,8 @@ class MediaSource: public virtual Monitor {
         audioSourceSSRC_ = ssrc;
     }
     virtual ~MediaSource() {}
+
+    virtual void close() = 0;
 };
 
 /**
