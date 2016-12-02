@@ -445,7 +445,7 @@ void ExternalOutput::queueData(char* buffer, int length, packetType type) {
     } else {
       videoQueue_.pushPacket(buffer, length);
     }
-  } else {
+  } else if (type == AUDIO_PACKET) {
     if (this->audioOffsetMsec_ == -1) {
       timeval time;
       gettimeofday(&time, NULL);
@@ -461,6 +461,8 @@ void ExternalOutput::queueData(char* buffer, int length, packetType type) {
       }
     }
     audioQueue_.pushPacket(buffer, length);
+  } else {
+    ELOG_INFO("received non VIDEO/AUDIO PACKET!");
   }
 
   if (audioQueue_.hasData() || videoQueue_.hasData()) {
