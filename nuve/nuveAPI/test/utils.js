@@ -73,6 +73,15 @@ var reset = module.exports.reset = function() {
     removeToken: sinon.stub()
   });
 
+  module.exports.erizoControllerRegistry = createMock('../mdb/erizoControllerRegistry', {
+    getErizoControllers: sinon.stub(),
+    getErizoController: sinon.stub(),
+    hasErizoController: sinon.stub(),
+    addErizoController: sinon.stub(),
+    updateErizoController: sinon.stub(),
+    removeErizoController: sinon.stub()
+  });
+
   module.exports.dataBase = createMock('../mdb/dataBase', {
     superService: 'superService',
     nuveKey: 'nuveKey',
@@ -82,6 +91,7 @@ var reset = module.exports.reset = function() {
       rooms: dbEntry(),
       services: dbEntry(),
       tokens: dbEntry(),
+      erizoControllers: dbEntry()
     }
   });
 
@@ -105,12 +115,12 @@ var reset = module.exports.reset = function() {
     createConnection: sinon.stub().returns(module.exports.amqpConnection)
   });
 
-  module.exports.ec2Client = {
-    call: sinon.stub()
+  module.exports.ec2MetadataService = {
+    request: sinon.stub()
   };
 
-  module.exports.awslib = createMock('aws-lib', {
-    createEC2Client: sinon.stub().returns(module.exports.ec2Client)
+  module.exports.awssdk = createMock('aws-sdk', {
+    MetadataService: sinon.stub().returns(module.exports.ec2MetadataService)
   });
 
   module.exports.rpcPublic = createMock('../rpc/rpcPublic', {

@@ -31,8 +31,8 @@ class WebRtcConnection : public MediaSink, public erizo::WebRtcConnectionEventLi
     WebRtcConnection();
     ~WebRtcConnection();
 
-    v8::Persistent<v8::Function> eventCallback_;
-    v8::Persistent<v8::Function> statsCallback_;
+    Nan::Callback *eventCallback_;
+    Nan::Callback *statsCallback_;
 
     uv_async_t async_;
     uv_async_t asyncStats_;
@@ -105,6 +105,11 @@ class WebRtcConnection : public MediaSink, public erizo::WebRtcConnectionEventLi
      */
     static NAN_METHOD(setSlideShowMode);
     /*
+     * Mutes or unmutes streams for this WRTC
+     * Param: A boolean indicating what to do
+     */
+    static NAN_METHOD(muteStream);
+    /*
      * Gets Stats from this Wrtc
      * Param: None
      * Returns: The Current stats
@@ -120,8 +125,8 @@ class WebRtcConnection : public MediaSink, public erizo::WebRtcConnectionEventLi
 
     static Nan::Persistent<v8::Function> constructor;
 
-    static void eventsCallback(uv_async_t *handle, int status);
-    static void statsCallback(uv_async_t *handle, int status);
+    static NAUV_WORK_CB(eventsCallback);
+    static NAUV_WORK_CB(statsCallback);
 
     virtual void notifyEvent(erizo::WebRTCEvent event, const std::string& message = "");
     virtual void notifyStats(const std::string& message);

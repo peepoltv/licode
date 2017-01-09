@@ -12,8 +12,12 @@ exports.ErizoNativeConnection = function (spec){
     var that = {},
     wrtc,
     initWebRtcConnection,
+    syntheticInput,
     externalInput,
     externalOutput;
+
+    var threadPool = new addon.ThreadPool(1);
+    threadPool.start();
 
     var CONN_INITIAL = 101,
         // CONN_STARTED = 102,
@@ -40,6 +44,8 @@ exports.ErizoNativeConnection = function (spec){
                         that.prepareVideo(spec.video.file);
                     } else if (spec.video && spec.video.recording && !externalOutput){
                         that.prepareRecording(spec.video.recording);
+                    } else if (spec.video && spec.video.synthetic && !syntheticInput) {
+                      that.prepareSynthetic(spec.video.synthetic);
                     }
                     callback('callback', {type: 'started'});
                     break;
@@ -66,6 +72,10 @@ exports.ErizoNativeConnection = function (spec){
                         log.info('Will start External Input');
                         externalInput.init();
                     }
+                    if (syntheticInput !== undefined){
+                        log.info('Will start Synthetic Input');
+                        syntheticInput.init();
+                    }
                     if (externalOutput !== undefined){
                         log.info('Will start External Output');
                         externalOutput.init();
@@ -77,7 +87,7 @@ exports.ErizoNativeConnection = function (spec){
     };
 
 
-    wrtc = new addon.WebRtcConnection('spine',
+    wrtc = new addon.WebRtcConnection(threadPool, 'spine',
                                       GLOBAL.config.erizo.stunserver,
                                       GLOBAL.config.erizo.stunport,
                                       GLOBAL.config.erizo.minport,
@@ -98,6 +108,17 @@ exports.ErizoNativeConnection = function (spec){
         externalInput = new addon.ExternalInput(url);
         externalInput.setAudioReceiver(wrtc);
         externalInput.setVideoReceiver(wrtc);
+    };
+
+    that.prepareSynthetic = function (config) {
+        log.info('Preparing synthetic video', config);
+        syntheticInput = new addon.SyntheticInput(threadPool,
+                                                  config.audioBitrate,
+                                                  config.minVideoBitrate,
+                                                  config.maxVideoBitrate);
+        syntheticInput.setAudioReceiver(wrtc);
+        syntheticInput.setVideoReceiver(wrtc);
+        syntheticInput.setFeedbackSource(wrtc);
     };
 
     that.prepareRecording = function (url) {
@@ -142,6 +163,9 @@ exports.ErizoNativeConnection = function (spec){
         }
         if (externalInput!==undefined){
             externalInput.close();
+        }
+        if (syntheticInput!==undefined){
+            syntheticInput.close();
         }
         wrtc.close();
     };

@@ -13,17 +13,17 @@ using v8::Value;
 
 Nan::Persistent<Function> ExternalOutput::constructor;
 
-class AsyncDeleter : public Nan::AsyncWorker {
+class AsyncCloser : public Nan::AsyncWorker {
  public:
-    AsyncDeleter(std::shared_ptr<erizo::ExternalOutput> eoToDelete, Nan::Callback *callback):
-      AsyncWorker(callback), eoToDelete_(eoToDelete) {
+    AsyncCloser(std::shared_ptr<erizo::ExternalOutput> external_output, Nan::Callback *callback):
+      AsyncWorker(callback), external_output_(external_output) {
       }
-    ~AsyncDeleter() {}
+    ~AsyncCloser() {}
     void Execute() {
-      eoToDelete_.reset();
+      external_output_->close();
     }
     void HandleOKCallback() {
-      HandleScope scope;
+      Nan::HandleScope scope;
       std::string msg("OK");
       if (callback) {
         Local<Value> argv[] = {
@@ -33,8 +33,7 @@ class AsyncDeleter : public Nan::AsyncWorker {
       }
     }
  private:
-    std::shared_ptr<erizo::ExternalOutput> eoToDelete_;
-    Nan::Callback* callback_;
+    std::shared_ptr<erizo::ExternalOutput> external_output_;
 };
 
 ExternalOutput::ExternalOutput() {}
@@ -66,7 +65,6 @@ NAN_METHOD(ExternalOutput::New) {
 
 NAN_METHOD(ExternalOutput::close) {
   ExternalOutput* obj = ObjectWrap::Unwrap<ExternalOutput>(info.Holder());
-  std::shared_ptr<erizo::ExternalOutput> me = obj->me;
 
   Nan::Callback *callback;
   if (info.Length() >= 1) {
@@ -75,8 +73,7 @@ NAN_METHOD(ExternalOutput::close) {
     callback = NULL;
   }
 
-  Nan::AsyncQueueWorker(new  AsyncDeleter(me, callback));
-  me.reset();
+  Nan::AsyncQueueWorker(new  AsyncCloser(obj->me, callback));
 }
 
 NAN_METHOD(ExternalOutput::init) {
