@@ -15,11 +15,18 @@ class RtpRetransmissionHandler : public Handler {
  public:
   DECLARE_LOGGER();
 
-  explicit RtpRetransmissionHandler(WebRtcConnection *connection);
+  RtpRetransmissionHandler();
+
+  void enable() override;
+  void disable() override;
+
+  std::string getName() override {
+    return "retransmissions";
+  }
 
   void read(Context *ctx, std::shared_ptr<dataPacket> packet) override;
-
   void write(Context *ctx, std::shared_ptr<dataPacket> packet) override;
+  void notifyUpdate() override;
 
  private:
   uint16_t getIndexInBuffer(uint16_t seq_num);

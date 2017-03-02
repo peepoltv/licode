@@ -71,7 +71,9 @@ NiceConnection::NiceConnection(boost::shared_ptr<LibNiceInterface> libnice, Medi
     for (unsigned int i = 1; i <= iceComponents_; i++) {
       comp_state_list_[i] = NICE_INITIAL;
     }
+    #if !GLIB_CHECK_VERSION(2, 35, 0)
     g_type_init();
+    #endif
   }
 
 NiceConnection::~NiceConnection() {
@@ -118,15 +120,23 @@ void NiceConnection::close() {
 }
 
 void NiceConnection::onData(unsigned int component_id, char* buf, int len) {
-  if (this->checkIceState() == NICE_READY) {
+  IceState state;
+  NiceConnectionListener* listener;
+  {
+    boost::mutex::scoped_lock(closeMutex_);
+    state = this->checkIceState();
+    listener = listener_;
+  }
+  if (state == NICE_READY) {
     packetPtr packet (new dataPacket());
     memcpy(packet->data, buf, len);
     packet->comp = component_id;
     packet->length = len;
     packet->received_time_ms = ClockUtils::timePointToMs(clock::now());
-    listener_->onPacketReceived(packet);
+    listener->onPacketReceived(packet);
   }
 }
+
 int NiceConnection::sendData(unsigned int compId, const void* buf, int len) {
   int val = -1;
   if (this->checkIceState() == NICE_READY) {
@@ -207,6 +217,13 @@ void NiceConnection::start() {
           (guint)iceConfig_.maxPort);
     }
 
+    if (!iceConfig_.network_interface.empty()) {
+      const char* public_ip = lib_nice_->NiceInterfacesGetIpForInterface(iceConfig_.network_interface.c_str());
+      if (public_ip) {
+        lib_nice_->NiceAgentAddLocalAddress(agent_, public_ip);
+      }
+    }
+
     if (iceConfig_.turnServer.compare("") != 0 && iceConfig_.turnPort != 0) {
       ELOG_DEBUG("%s message: configuring TURN, turnServer: %s , turnPort: %d, turnUsername: %s, turnPass: %s",
                  toLog(), iceConfig_.turnServer.c_str(),
@@ -275,6 +292,9 @@ bool NiceConnection::setRemoteCandidates(const std::vector<CandidateInfo> &candi
         nice_cand_type = NICE_CANDIDATE_TYPE_HOST;
         break;
     }
+    if (cinfo.hostPort == 0) {
+      continue;
+    }
     NiceCandidate* thecandidate = nice_candidate_new(nice_cand_type);
     thecandidate->username = strdup(cinfo.username.c_str());
     thecandidate->password = strdup(cinfo.password.c_str());
@@ -336,6 +356,9 @@ void NiceConnection::getCandidate(uint stream_id, uint component_id, const std::
     cand_info.priority = cand->priority;
     cand_info.hostAddress = std::string(address);
     cand_info.hostPort = nice_address_get_port(&cand->addr);
+    if (cand_info.hostPort == 0) {
+      continue;
+    }
     cand_info.mediaType = mediaType;
 
     /*
@@ -467,6 +490,16 @@ void NiceConnection::updateIceState(IceState state) {
     this->listener_->updateIceState(state, this);
 }
 
+std::string getHostTypeFromCandidate(NiceCandidate *candidate) {
+  switch (candidate->type) {
+    case NICE_CANDIDATE_TYPE_HOST: return "host";
+    case NICE_CANDIDATE_TYPE_SERVER_REFLEXIVE: return "serverReflexive";
+    case NICE_CANDIDATE_TYPE_PEER_REFLEXIVE: return "peerReflexive";
+    case NICE_CANDIDATE_TYPE_RELAYED: return "relayed";
+    default: return "unknown";
+  }
+}
+
 CandidatePair NiceConnection::getSelectedPair() {
   char ipaddr[NICE_ADDRESS_STRING_LEN];
   CandidatePair selectedPair;
@@ -475,13 +508,15 @@ CandidatePair NiceConnection::getSelectedPair() {
   nice_address_to_string(&local->addr, ipaddr);
   selectedPair.erizoCandidateIp = std::string(ipaddr);
   selectedPair.erizoCandidatePort = nice_address_get_port(&local->addr);
-  ELOG_DEBUG("%s message: selected pair, local_addr: %s, local_port: %d",
-              toLog(), ipaddr, nice_address_get_port(&local->addr));
+  selectedPair.erizoHostType = getHostTypeFromCandidate(local);
+  ELOG_DEBUG("%s message: selected pair, local_addr: %s, local_port: %d, local_type: %s",
+              toLog(), ipaddr, nice_address_get_port(&local->addr), selectedPair.erizoHostType.c_str());
   nice_address_to_string(&remote->addr, ipaddr);
   selectedPair.clientCandidateIp = std::string(ipaddr);
   selectedPair.clientCandidatePort = nice_address_get_port(&remote->addr);
-  ELOG_INFO("%s message: selected pair, remote_addr: %s, remote_port: %d",
-             toLog(), ipaddr, nice_address_get_port(&remote->addr));
+  selectedPair.clientHostType = getHostTypeFromCandidate(local);
+  ELOG_INFO("%s message: selected pair, remote_addr: %s, remote_port: %d, remote_type: %s",
+             toLog(), ipaddr, nice_address_get_port(&remote->addr), selectedPair.clientHostType.c_str());
   return selectedPair;
 }
 

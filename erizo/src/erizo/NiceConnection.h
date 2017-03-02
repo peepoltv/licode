@@ -41,12 +41,14 @@ struct CandidatePair{
   int erizoCandidatePort;
   std::string clientCandidateIp;
   int clientCandidatePort;
+  std::string erizoHostType;
+  std::string clientHostType;
 };
 
 class IceConfig {
  public:
     std::string turnServer, turnUsername, turnPass;
-    std::string stunServer;
+    std::string stunServer, network_interface;
     uint16_t stunPort, turnPort, minPort, maxPort;
     bool shouldTrickle;
     IceConfig(){
@@ -59,6 +61,7 @@ class IceConfig {
       minPort = 0;
       maxPort = 0;
       shouldTrickle = false;
+      network_interface = "";
     }
 };
 

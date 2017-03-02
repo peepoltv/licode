@@ -7,7 +7,7 @@ var logger = require('./../../common/logger').logger;
 var log = logger.getLogger('Publisher');
 
 function createWrtc(id, threadPool) {
-  return new addon.WebRtcConnection(threadPool, id,
+  var wrtc = new addon.WebRtcConnection(threadPool, id,
                                     GLOBAL.config.erizo.stunserver,
                                     GLOBAL.config.erizo.stunport,
                                     GLOBAL.config.erizo.minport,
@@ -17,7 +17,10 @@ function createWrtc(id, threadPool) {
                                     GLOBAL.config.erizo.turnserver,
                                     GLOBAL.config.erizo.turnport,
                                     GLOBAL.config.erizo.turnusername,
-                                    GLOBAL.config.erizo.turnpass);
+                                    GLOBAL.config.erizo.turnpass,
+                                    GLOBAL.config.erizo.networkinterface);
+
+  return wrtc;
 }
 
 class Source {
@@ -101,6 +104,13 @@ class Source {
     }
   }
 
+  setQualityLayer(id, spatialLayer, temporalLayer) {
+    var subscriber = this.getSubscriber(id);
+    log.info('message: setQualityLayer, spatialLayer: ', spatialLayer,
+                                     ', temporalLayer: ', temporalLayer);
+    subscriber.setQualityLayer(spatialLayer, temporalLayer);
+  }
+
   muteSubscriberStream(id, muteVideo, muteAudio) {
     var subscriber = this.getSubscriber(id);
     subscriber.muteVideo = muteVideo;
@@ -109,6 +119,30 @@ class Source {
                                  ', audio: ', this.muteAudio || muteAudio);
     subscriber.muteStream(this.muteVideo || muteVideo,
                           this.muteAudio || muteAudio);
+  }
+
+  enableHandlers(id, handlers) {
+    var wrtc = this.wrtc;
+    if (id) {
+      wrtc = this.getSubscriber(id);
+    }
+    if (wrtc) {
+      for (var index in handlers) {
+        wrtc.enableHandler(handlers[index]);
+      }
+    }
+  }
+
+  disableHandlers(id, handlers) {
+    var wrtc = this.wrtc;
+    if (id) {
+      wrtc = this.getSubscriber(id);
+    }
+    if (wrtc) {
+      for (var index in handlers) {
+        wrtc.disableHandler(handlers[index]);
+      }
+    }
   }
 }
 

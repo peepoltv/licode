@@ -15,7 +15,8 @@ exports.ErizoJSController = function (threadPool) {
         // {id1: Publisher, id2: Publisher}
         publishers = {},
 
-        SLIDESHOW_TIME = 1000,
+        MIN_SLIDESHOW_PERIOD = 2000,
+        MAX_SLIDESHOW_PERIOD = 10000,
         PLIS_TO_RECOVER = 3,
         initWebRtcConnection,
         closeWebRtcConnection,
@@ -70,7 +71,7 @@ exports.ErizoJSController = function (threadPool) {
 
         if (GLOBAL.config.erizoController.report.rtcp_stats) {  // jshint ignore:line
             log.debug('message: RTCP Stat collection is active');
-            wrtc.getStats(function (newStats) {
+            wrtc.getPeriodicStats(function (newStats) {
                 var timeStamp = new Date();
                 amqper.broadcast('stats', {pub: idPub,
                                            subs: idSub,
@@ -125,19 +126,19 @@ exports.ErizoJSController = function (threadPool) {
                     if (idSub && options.browser === 'bowser') {
                         publishers[idPub].wrtc.generatePLIPacket();
                     }
-                    if (options.slideShowMode === true) {
-                        that.setSlideShow(true, idSub, idPub);
+                    if (options.slideShowMode === true || Number.isSafeInteger(options.slideShowMode)) {
+                        that.setSlideShow(options.slideShowMode, idSub, idPub);
                     }
                     callback('callback', {type: 'ready'});
                     break;
             }
         });
-        if (options.createOffer === true) {
+        if (options.createOffer) {
             log.debug('message: create offer requested, id:', wrtc.wrtcId);
-            var audioEnabled = true;
-            var videoEnabled = true;
-            var bundle = true;
-            wrtc.createOffer(audioEnabled, videoEnabled, bundle);
+            var audioEnabled = options.createOffer.audio;
+            var videoEnabled = options.createOffer.video;
+            var bundle = options.createOffer.bundle;
+            wrtc.createOffer(videoEnabled, audioEnabled, bundle);
         }
         callback('callback', {type: 'initializing'});
     };
@@ -213,15 +214,36 @@ exports.ErizoJSController = function (threadPool) {
         }
     };
 
+    var processControlMessage = function(publisher, subscriberId, action) {
+      var publisherSide = subscriberId === undefined || action.publisherSide;
+      switch(action.name) {
+        case 'controlhandlers':
+          if (action.enable) {
+            publisher.enableHandlers(publisherSide ? undefined : subscriberId, action.handlers);
+          } else {
+            publisher.disableHandlers(publisherSide ? undefined : subscriberId, action.handlers);
+          }
+          break;
+      }
+    };
+
+    var disableDefaultHandlers = function(wrtc) {
+      var disabledHandlers = GLOBAL.config.erizo['disabled_handlers'];
+      for (var index in disabledHandlers) {
+        wrtc.disableHandler(disabledHandlers[index]);
+      }
+    };
+
     that.processSignaling = function (streamId, peerId, msg) {
         log.info('message: Process Signaling message, ' +
-                 'streamId: ' + streamId + ', peerId: ' + peerId, msg);
+                 'streamId: ' + streamId + ', peerId: ' + peerId);
         if (publishers[streamId] !== undefined) {
             var publisher = publishers[streamId];
             if (publisher.hasSubscriber(peerId)) {
                 var subscriber = publisher.getSubscriber(peerId);
                 if (msg.type === 'offer') {
                     subscriber.setRemoteSdp(msg.sdp);
+                    disableDefaultHandlers(subscriber);
                 } else if (msg.type === 'candidate') {
                     subscriber.addRemoteCandidate(msg.candidate.sdpMid,
                                                                      msg.candidate.sdpMLineIndex,
@@ -236,11 +258,17 @@ exports.ErizoJSController = function (threadPool) {
                         if (msg.config.muteStream !== undefined) {
                             that.muteStream (msg.config.muteStream, peerId, streamId);
                         }
+                        if (msg.config.qualityLayer !== undefined) {
+                            that.setQualityLayer (msg.config.qualityLayer, peerId, streamId);
+                        }
                     }
+                } else if (msg.type === 'control') {
+                  processControlMessage(publisher, peerId, msg.action);
                 }
             } else {
                 if (msg.type === 'offer') {
                     publisher.wrtc.setRemoteSdp(msg.sdp);
+                    disableDefaultHandlers(publisher.wrtc);
                 } else if (msg.type === 'candidate') {
                     publisher.wrtc.addRemoteCandidate(msg.candidate.sdpMid,
                                                                  msg.candidate.sdpMLineIndex,
@@ -266,6 +294,8 @@ exports.ErizoJSController = function (threadPool) {
                             that.muteStream (msg.config.muteStream, peerId, streamId);
                         }
                     }
+                } else if (msg.type === 'control') {
+                  processControlMessage(publisher, undefined, msg.action);
                 }
             }
 
@@ -435,16 +465,21 @@ exports.ErizoJSController = function (threadPool) {
 
         log.debug('message: setting SlideShow, id: ' + theWrtc.wrtcId +
                   ', slideShowMode: ' + slideShowMode);
-        if (slideShowMode === true) {
+        var period =  slideShowMode === true ? MIN_SLIDESHOW_PERIOD : slideShowMode;
+        if (Number.isSafeInteger(period)) {
+            period = period < MIN_SLIDESHOW_PERIOD ? MIN_SLIDESHOW_PERIOD : period;
+            period = period > MAX_SLIDESHOW_PERIOD ? MAX_SLIDESHOW_PERIOD : period;
             theWrtc.setSlideShowMode(true);
             theWrtc.slideShowMode = true;
             wrtcPub = publisher.wrtc;
-            if (wrtcPub.periodicPlis === undefined) {
-                wrtcPub.periodicPlis = setInterval(function () {
-                    if(wrtcPub)
-                        wrtcPub.generatePLIPacket();
-                }, SLIDESHOW_TIME);
+            if (wrtcPub.periodicPlis) {
+                clearInterval(wrtcPub.periodicPlis);
+                wrtcPub.periodicPlis = undefined;
             }
+            wrtcPub.periodicPlis = setInterval(function () {
+                if(wrtcPub)
+                    wrtcPub.generatePLIPacket();
+            }, period);
         } else {
             wrtcPub = publisher.wrtc;
             for (var pliIndex = 0; pliIndex < PLIS_TO_RECOVER; pliIndex++) {
@@ -482,6 +517,43 @@ exports.ErizoJSController = function (threadPool) {
           publisher.muteSubscriberStream(from, muteStreamInfo.video, muteStreamInfo.audio);
         } else {
           publisher.muteStream(muteStreamInfo.video, muteStreamInfo.audio);
+        }
+    };
+
+    that.setQualityLayer = function (qualityLayer, from, to) {
+      var publisher = this.publishers[to];
+      if (publisher.hasSubscriber(from)) {
+        publisher.setQualityLayer(from, qualityLayer.spatialLayer, qualityLayer.temporalLayer);
+      }
+    };
+
+    /* eslint no-param-reassign: ["error", { "props": false }] */
+    const getWrtcStats = (label, stats, wrtc) => {
+      const promise = new Promise((resolve) => {
+        wrtc.getStats((statsString) => {
+          const unfilteredStats = JSON.parse(statsString);
+          unfilteredStats.metadata = wrtc.metadata;
+          stats[label] = unfilteredStats;
+          resolve();
+        });
+      });
+      return promise;
+    };
+
+    that.getStreamStats = function (to, callback) {
+        var stats = {};
+        var publisher;
+        log.info('message: Requested stream stats, streamID: ' + to);
+        var promises = [];
+        if (to && publishers[to]) {
+          publisher = publishers[to];
+          promises.push(getWrtcStats('publisher', stats, publisher.wrtc));
+          for (var sub in publisher.subscribers) {
+            promises.push(getWrtcStats(sub, stats, publisher.subscribers[sub]));
+          }
+          Promise.all(promises).then(() => {
+            callback('callback', stats);
+          });
         }
     };
 

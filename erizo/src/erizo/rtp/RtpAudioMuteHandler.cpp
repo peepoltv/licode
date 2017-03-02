@@ -6,8 +6,23 @@ namespace erizo {
 
 DEFINE_LOGGER(RtpAudioMuteHandler, "rtp.RtpAudioMuteHandler");
 
-RtpAudioMuteHandler::RtpAudioMuteHandler(WebRtcConnection *connection) :
-  last_original_seq_num_{-1}, seq_num_offset_{0}, mute_is_active_{false}, connection_{connection} {}
+RtpAudioMuteHandler::RtpAudioMuteHandler() :
+  last_original_seq_num_{-1}, seq_num_offset_{0}, mute_is_active_{false}, connection_{nullptr} {}
+
+
+void RtpAudioMuteHandler::enable() {
+}
+
+void RtpAudioMuteHandler::disable() {
+}
+
+void RtpAudioMuteHandler::notifyUpdate() {
+  auto pipeline = getContext()->getPipelineShared();
+  if (pipeline && !connection_) {
+    connection_ = pipeline->getService<WebRtcConnection>().get();
+  }
+  muteAudio(connection_->isAudioMuted());
+}
 
 void RtpAudioMuteHandler::read(Context *ctx, std::shared_ptr<dataPacket> packet) {
   RtcpHeader *chead = reinterpret_cast<RtcpHeader*>(packet->data);
@@ -15,11 +30,7 @@ void RtpAudioMuteHandler::read(Context *ctx, std::shared_ptr<dataPacket> packet)
     ctx->fireRead(packet);
     return;
   }
-  uint16_t offset;
-  {
-    std::lock_guard<std::mutex> lock(control_mutex_);
-    offset = seq_num_offset_;
-  }
+  uint16_t offset = seq_num_offset_;
   if (offset > 0) {
     char* buf = packet->data;
     char* report_pointer = buf;
@@ -59,11 +70,8 @@ void RtpAudioMuteHandler::write(Context *ctx, std::shared_ptr<dataPacket> packet
   }
   bool is_muted;
   uint16_t offset;
-  {
-    std::lock_guard<std::mutex> lock(control_mutex_);
-    is_muted = mute_is_active_;
-    offset = seq_num_offset_;
-  }
+  is_muted = mute_is_active_;
+  offset = seq_num_offset_;
   last_original_seq_num_ = rtp_header->getSeqNumber();
   if (!is_muted) {
     last_sent_seq_num_ = last_original_seq_num_ - offset;
@@ -75,7 +83,9 @@ void RtpAudioMuteHandler::write(Context *ctx, std::shared_ptr<dataPacket> packet
 }
 
 void RtpAudioMuteHandler::muteAudio(bool active) {
-  std::lock_guard<std::mutex> lock(control_mutex_);
+  if (mute_is_active_ == active) {
+    return;
+  }
   mute_is_active_ = active;
   ELOG_INFO("%s message: Mute Audio, active: %d", connection_->toLog(), active);
   if (!mute_is_active_) {

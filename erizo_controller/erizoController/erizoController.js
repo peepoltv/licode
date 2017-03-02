@@ -195,19 +195,21 @@ var addToCloudHandler = function (callback) {
         k2,
         address;
 
-
     for (k in interfaces) {
-        if (interfaces.hasOwnProperty(k)) {
-            for (k2 in interfaces[k]) {
-                if (interfaces[k].hasOwnProperty(k2)) {
-                    address = interfaces[k][k2];
-                    if (address.family === 'IPv4' && !address.internal) {
-                        if (k === BINDED_INTERFACE_NAME || !BINDED_INTERFACE_NAME) {
-                            addresses.push(address.address);
-                        }
-                    }
-                }
-            }
+        if (!GLOBAL.config.erizoController.networkinterface ||
+            GLOBAL.config.erizoController.networkinterface === k) {
+          if (interfaces.hasOwnProperty(k)) {
+              for (k2 in interfaces[k]) {
+                  if (interfaces[k].hasOwnProperty(k2)) {
+                      address = interfaces[k][k2];
+                      if (address.family === 'IPv4' && !address.internal) {
+                          if (k === BINDED_INTERFACE_NAME || !BINDED_INTERFACE_NAME) {
+                              addresses.push(address.address);
+                          }
+                      }
+                  }
+              }
+          }
         }
     }
 
@@ -468,12 +470,23 @@ var listen = function () {
             }
         });
 
+        var hasPermission = function(user, action) {
+          return user && user.permissions[action] === true;
+        };
+
         socket.on('signaling_message', function (msg) {
             if (socket.room.p2p) {
                 io.sockets.socket(msg.peerSocket).emit('signaling_message_peer',
                         {streamId: msg.streamId, peerSocket: socket.id, msg: msg.msg});
             } else {
-                socket.room.controller.processSignaling(msg.streamId, socket.id, msg.msg);
+                var isControlMessage = msg.msg.type === 'control';
+                if (!isControlMessage ||
+                    (isControlMessage && hasPermission(socket.user, msg.msg.action.name))) {
+                  socket.room.controller.processSignaling(msg.streamId, socket.id, msg.msg);
+                } else {
+                  log.info('message: User unauthorized to execute action on stream, action: ' + msg.msg.action.name +
+                            ', streamId: ' + msg.streamId);
+                }
             }
         });
 
@@ -974,7 +987,26 @@ var listen = function () {
                 updateMyState();
             }
         });
+
+        socket.on('getStreamStats', function (streamId, callback) {
+            log.debug('Getting stats for streamId ' + streamId);
+            if (socket.user === undefined || !socket.user.permissions[Permission.STATS]) {
+                log.info('message: unauthorized getStreamStats request');
+                if (callback) callback(null, 'Unauthorized');
+                return;
+            }
+            if (socket.room.streams[streamId] === undefined) {
+                log.info('message: bad getStreamStats request');
+                return;
+            }
+            if (socket.room !== undefined){
+                socket.room.controller.getStreamStats(streamId, function (result) {
+                    callback(result);
+                });
+            }
+        });
     });
+
 };
 
 

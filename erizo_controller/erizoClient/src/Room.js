@@ -84,7 +84,10 @@ Erizo.Room = function (spec) {
             stream.hide();
 
             // Close PC stream
-            if (stream.pc) stream.pc.close();
+            if (stream.pc) {
+              stream.pc.close();
+              delete stream.pc;
+            }
             if (stream.local) {
                 stream.stream.stop();
             }
@@ -151,6 +154,7 @@ Erizo.Room = function (spec) {
                                        screen: arg.screen,
                                        attributes: arg.attributes}),
                 evt;
+            stream.room = that;
             that.remoteStreams[arg.id] = stream;
             evt = Erizo.StreamEvent({type: 'stream-added', stream: stream});
             that.dispatchEvent(evt);
@@ -487,13 +491,12 @@ Erizo.Room = function (spec) {
             options.minVideoBW = spec.defaultVideoBW;
         }
 
-        options.maxAudioBW = options.maxAudioBW || spec.defaultAudioBW;
-        if(options.maxAudioBW > spec.maxAudioBW) {
-            options.maxAudioBW = spec.maxAudioBW;
-        }
+        // TODO(javier): remove dangling once Simulcast is stable
+        options._simulcast = options._simulcast || false;
 
-        // 1- If the stream is not local we do nothing.
-        if (stream && stream.local && that.localStreams[stream.getID()] === undefined) {
+        // 1- If the stream is not local or it is a failed stream we do nothing.
+        if (stream && stream.local && !stream.failed
+          && that.localStreams[stream.getID()] === undefined) {
 
             // 2- Publish Media Stream to Erizo-Controller
             if (stream.hasAudio() || stream.hasVideo() || stream.hasScreen()) {
@@ -622,6 +625,7 @@ Erizo.Room = function (spec) {
                                maxVideoBW: options.maxVideoBW,
                                limitMaxAudioBW: spec.maxAudioBW,
                                limitMaxVideoBW: spec.maxVideoBW,
+                               simulcast: options._simulcast,
                                audio: stream.hasAudio(),
                                video: stream.hasVideo()});
 
@@ -733,6 +737,13 @@ Erizo.Room = function (spec) {
                     return;
                 }
 
+                // remove stream failed property since the stream has been
+                // correctly removed from licode so is eligible to be
+                // published again
+                if (stream.failed) {
+                   delete stream.failed;
+                }
+
                 L.Logger.info('Stream unpublished');
                 if (callback) callback(true);
 
@@ -768,15 +779,25 @@ Erizo.Room = function (spec) {
         }
     };
 
+    that.sendControlMessage = function(stream, type, action) {
+      if (stream && stream.getID()) {
+        var msg = {type: 'control', action: action};
+        sendSDPSocket('signaling_message', {streamId: stream.getID(), msg: msg});
+      }
+    };
+
     // It subscribe to a remote stream and draws it inside the HTML tag given by the ID='elementID'
     that.subscribe = function (stream, options, callback) {
 
         options = options || {};
 
-        if (stream && !stream.local) {
+        if (stream && !stream.local && !stream.failed) {
 
             if (stream.hasVideo() || stream.hasAudio() || stream.hasScreen()) {
                 // 1- Subscribe to Stream
+
+                if (!stream.hasVideo() && !stream.hasScreen()) options.video = false;
+                if (!stream.hasAudio()) options.audio = false;
 
                 if (that.p2p) {
                     sendSDPSocket('subscribe', {streamId: stream.getID(),
@@ -881,6 +902,11 @@ Erizo.Room = function (spec) {
                                  'subscribe to the remote version of your local stream');
                 error = 'Local copy of stream';
             }
+            else if (stream.failed){
+                L.Logger.warning('Cannot subscribe to failed stream, you should ' +
+                                 'wait a new stream-added event.');
+                error = 'Failed stream';
+            }
             if (callback)
                 callback(undefined, error);
             return;
@@ -905,6 +931,22 @@ Erizo.Room = function (spec) {
                 });
             }
         }
+    };
+
+    that.getStreamStats = function (stream, callback) {
+        if (!that.socket) {
+            return 'Error getting stats - no socket';
+        }
+        if (!stream) {
+            return 'Error getting stats - no stream';
+        }
+
+        sendMessageSocket('getStreamStats', stream.getID(), function (result) {
+            if (result) {
+                L.Logger.info('Got stats', result);
+                callback(result);
+            }
+        });
     };
 
     //It searchs the streams that have "name" attribute with "value" value

@@ -38,6 +38,10 @@ var reset = module.exports.reset = function() {
       setEncoding: sinon.stub(),
       on: sinon.stub()
     },
+    stderr: {
+      setEncoding: sinon.stub(),
+      on: sinon.stub()
+    },
     on: sinon.stub(),
     unref: sinon.stub(),
     kill: sinon.stub()
@@ -138,6 +142,7 @@ var reset = module.exports.reset = function() {
     setVideoReceiver: sinon.stub(),
     close: sinon.stub(),
     getStats: sinon.stub(),
+    getPeriodicStats: sinon.stub(),
     generatePLIPacket: sinon.stub(),
     createOffer: sinon.stub(),
     setRemoteSdp: sinon.stub(),

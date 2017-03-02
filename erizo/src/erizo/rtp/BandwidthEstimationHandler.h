@@ -3,8 +3,11 @@
 
 #include <array>
 #include <vector>
+#include <string>
+#include <atomic>
 
 #include "./logger.h"
+#include "./Stats.h"
 #include "pipeline/Handler.h"
 #include "rtp/RtpExtensionProcessor.h"
 
@@ -36,14 +39,22 @@ class BandwidthEstimationHandler: public Handler, public RemoteBitrateObserver,
  public:
   static const uint32_t kRembMinimumBitrate;
 
-  explicit BandwidthEstimationHandler(WebRtcConnection *connection, std::shared_ptr<Worker> worker,
+  explicit BandwidthEstimationHandler(
     std::shared_ptr<RemoteBitrateEstimatorPicker> picker = std::make_shared<RemoteBitrateEstimatorPicker>());
 
   void OnReceiveBitrateChanged(const std::vector<uint32_t>& ssrcs,
                                        uint32_t bitrate) override;
 
+  void enable() override;
+  void disable() override;
+
+  std::string getName() override {
+    return "bwe";
+  }
+
   void read(Context *ctx, std::shared_ptr<dataPacket> packet) override;
   void write(Context *ctx, std::shared_ptr<dataPacket> packet) override;
+  void notifyUpdate() override;
 
   void updateExtensionMaps(std::array<RTPExtensions, 10> video_map, std::array<RTPExtensions, 10> audio_map);
 
@@ -59,6 +70,7 @@ class BandwidthEstimationHandler: public Handler, public RemoteBitrateObserver,
 
   WebRtcConnection *connection_;
   std::shared_ptr<Worker> worker_;
+  std::shared_ptr<Stats> stats_;
   webrtc::Clock* const clock_;
   std::shared_ptr<RemoteBitrateEstimatorPicker> picker_;
   std::unique_ptr<RemoteBitrateEstimator> rbe_;
@@ -68,10 +80,12 @@ class BandwidthEstimationHandler: public Handler, public RemoteBitrateObserver,
   webrtc::RTPHeader header_;
   RtcpHeader remb_packet_;
   RtpHeaderExtensionMap ext_map_audio_, ext_map_video_;
-  Context *temp_ctx_;
-  uint32_t bitrate_, last_send_bitrate_;
+  uint32_t bitrate_;
+  uint32_t last_send_bitrate_;
   uint64_t last_remb_time_;
   bool running_;
+  bool active_;
+  bool initialized_;
 };
 }  // namespace erizo
 

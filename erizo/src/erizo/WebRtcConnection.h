@@ -14,14 +14,12 @@
 #include "./Stats.h"
 #include "pipeline/Pipeline.h"
 #include "thread/Worker.h"
-#include "webrtc/modules/rtp_rtcp/include/ulpfec_receiver.h"
 #include "rtp/RtcpProcessor.h"
 #include "rtp/RtpExtensionProcessor.h"
-#include "rtp/RtpSlideShowHandler.h"
-#include "rtp/RtpVP8SlideShowHandler.h"
-#include "rtp/RtpAudioMuteHandler.h"
-#include "rtp/BandwidthEstimationHandler.h"
 #include "lib/Clock.h"
+#include "pipeline/Handler.h"
+#include "pipeline/Service.h"
+#include "rtp/QualityManager.h"
 
 namespace erizo {
 
@@ -59,8 +57,8 @@ class WebRtcConnectionStatsListener {
  * it comprises all the necessary Transport components.
  */
 class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSink,
-                        public FeedbackSource, public TransportListener, public webrtc::RtpData, public LogContext,
-                        public std::enable_shared_from_this<WebRtcConnection> {
+                        public FeedbackSource, public TransportListener, public LogContext,
+                        public std::enable_shared_from_this<WebRtcConnection>, public Service {
   DECLARE_LOGGER();
 
  public:
@@ -71,7 +69,8 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
    * Constructs an empty WebRTCConnection without any configuration.
    */
   WebRtcConnection(std::shared_ptr<Worker> worker, const std::string& connection_id, const IceConfig& iceConfig,
-      const std::vector<RtpMap> rtp_mappings, WebRtcConnectionEventListener* listener);
+      const std::vector<RtpMap> rtp_mappings, const std::vector<erizo::ExtMap> ext_mappings,
+      WebRtcConnectionEventListener* listener);
   /**
    * Destructor.
    */
@@ -102,15 +101,14 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
    */
   std::string getLocalSdp();
 
-  int deliverAudioData(char* buf, int len);
-  int deliverVideoData(char* buf, int len);
-  int deliverFeedback(char* buf, int len);
-
   /**
    * Sends a PLI Packet
    * @return the size of the data sent
    */
   int sendPLI() override;
+
+  void setQualityLayer(int spatial_layer, int temporal_layer);
+
   /**
    * Sets the Event Listener for this WebRtcConnection
    */
@@ -123,7 +121,7 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
    */
   inline void setWebRtcConnectionStatsListener(
             WebRtcConnectionStatsListener* listener) {
-    this->thisStats_.setStatsListener(listener);
+    stats_->setStatsListener(listener);
   }
 
   /**
@@ -132,7 +130,7 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
    */
   WebRTCEvent getCurrentState();
 
-  std::string getJSONStats();
+  void getJSONStats(std::function<void(std::string)> callback);
 
   void onTransportData(std::shared_ptr<dataPacket> packet, Transport *transport) override;
 
@@ -148,17 +146,46 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
 
   void setMetadata(std::map<std::string, std::string> metadata);
 
-  // webrtc::RtpHeader overrides.
-  int32_t OnReceivedPayloadData(const uint8_t* payloadData, size_t payloadSize,
-                                const webrtc::WebRtcRTPHeader* rtpHeader) override;
-  bool OnRecoveredPacket(const uint8_t* packet, size_t packet_length) override;
-
   void read(std::shared_ptr<dataPacket> packet);
   void write(std::shared_ptr<dataPacket> packet);
+
+  void enableHandler(const std::string &name);
+  void disableHandler(const std::string &name);
+  void notifyUpdateToHandlers();
+
+  void asyncTask(std::function<void(std::shared_ptr<WebRtcConnection>)> f);
+
+  bool isAudioMuted() { return audio_muted_; }
+
+  SdpInfo& getRemoteSdpInfo() { return remoteSdp_; }
+
+  bool isSlideShowModeEnabled() { return slide_show_mode_; }
+
+  RtpExtensionProcessor& getRtpExtensionProcessor() { return extProcessor_; }
+
+  std::shared_ptr<Worker> getWorker() { return worker_; }
+
+  bool isSourceSSRC(uint32_t ssrc);
+  bool isSinkSSRC(uint32_t ssrc);
 
   inline const char* toLog() {
     return ("id: " + connection_id_ + ", " + printLogContext()).c_str();
   }
+
+ private:
+  void sendPacket(std::shared_ptr<dataPacket> packet);
+  int deliverAudioData_(std::shared_ptr<dataPacket> audio_packet) override;
+  int deliverVideoData_(std::shared_ptr<dataPacket> video_packet) override;
+  int deliverFeedback_(std::shared_ptr<dataPacket> fb_packet) override;
+  void initializePipeline();
+
+  // Utils
+  std::string getJSONCandidate(const std::string& mid, const std::string& sdp);
+  // changes the outgoing payload type for in the given data packet
+  void changeDeliverPayloadType(dataPacket *dp, packetType type);
+  // parses incoming payload type, replaces occurence in buf
+  void parseIncomingPayloadType(char *buf, int len, packetType type);
+  void trackTransportInfo();
 
  private:
   std::string connection_id_;
@@ -168,7 +195,7 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
   bool videoEnabled_;
   bool trickleEnabled_;
   bool shouldSendFeedback_;
-  bool slideShowMode_;
+  bool slide_show_mode_;
   bool sending_;
   int bundle_;
   WebRtcConnectionEventListener* connEventListener_;
@@ -178,18 +205,17 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
 
   uint32_t rateControl_;  // Target bitrate for hacky rate control in BPS
 
-  int stunPort_, minPort_, maxPort_;
   std::string stunServer_;
 
-  std::unique_ptr<webrtc::UlpfecReceiver> fec_receiver_;
   boost::condition_variable cond_;
 
   time_point now_, mark_;
 
-  boost::shared_ptr<RtcpProcessor> rtcpProcessor_;
+  std::shared_ptr<RtcpProcessor> rtcp_processor_;
   std::shared_ptr<Transport> videoTransport_, audioTransport_;
 
-  Stats thisStats_;
+  std::shared_ptr<Stats> stats_;
+  std::shared_ptr<QualityManager> quality_manager_;
   WebRTCEvent globalState_;
 
   boost::mutex updateStateMutex_;  // , slideShowMutex_;
@@ -198,30 +224,27 @@ class WebRtcConnection: public MediaSink, public MediaSource, public FeedbackSin
 
   std::shared_ptr<Worker> worker_;
 
-  std::shared_ptr<RtpSlideShowHandler> slideshow_handler_;
-  std::shared_ptr<RtpAudioMuteHandler> audio_mute_handler_;
-  std::shared_ptr<BandwidthEstimationHandler> bwe_handler_;
+  bool audio_muted_;
 
-  void sendPacket(std::shared_ptr<dataPacket> packet);
-  int deliverAudioData_(char* buf, int len) override;
-  int deliverVideoData_(char* buf, int len) override;
-  int deliverFeedback_(char* buf, int len) override;
-
-
-  // Utils
-  std::string getJSONCandidate(const std::string& mid, const std::string& sdp);
-  // changes the outgoing payload type for in the given data packet
-  void changeDeliverPayloadType(dataPacket *dp, packetType type);
-  // parses incoming payload type, replaces occurence in buf
-  void parseIncomingPayloadType(char *buf, int len, packetType type);
+  bool pipeline_initialized_;
 };
 
 class PacketReader : public InboundHandler {
  public:
   explicit PacketReader(WebRtcConnection *connection) : connection_{connection} {}
 
+  void enable() override {}
+  void disable() override {}
+
+  std::string getName() override {
+    return "reader";
+  }
+
   void read(Context *ctx, std::shared_ptr<dataPacket> packet) override {
     connection_->read(packet);
+  }
+
+  void notifyUpdate() override {
   }
 
  private:
@@ -232,8 +255,18 @@ class PacketWriter : public OutboundHandler {
  public:
   explicit PacketWriter(WebRtcConnection *connection) : connection_{connection} {}
 
+  void enable() override {}
+  void disable() override {}
+
+  std::string getName() override {
+    return "writer";
+  }
+
   void write(Context *ctx, std::shared_ptr<dataPacket> packet) override {
     connection_->write(packet);
+  }
+
+  void notifyUpdate() override {
   }
 
  private:

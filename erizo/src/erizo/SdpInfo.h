@@ -171,7 +171,7 @@ class SdpInfo {
   * Gets the payloadType information
   * @return A vector containing the PT-codec information
   */
-  const std::vector<RtpMap>& getPayloadInfos();
+  std::vector<RtpMap>& getPayloadInfos();
   /**
    * Gets the actual SDP.
    * @return The SDP in string format.
@@ -202,6 +202,8 @@ class SdpInfo {
    */
   unsigned int getVideoExternalPT(unsigned int internalPT);
 
+  RtpMap* getCodecByExternalPayloadType(const unsigned int payload_type);
+
   void setCredentials(const std::string& username, const std::string& password, MediaType media);
 
   std::string getUsername(MediaType media) const;
@@ -221,10 +223,15 @@ class SdpInfo {
    */
   void setOfferSdp(const SdpInfo& offerSdp);
 
+  void updateSupportedExtensionMap(const std::vector<ExtMap> &ext_map);
+  bool isValidExtension(std::string uri);
+
   /**
    * The audio and video SSRCs for this particular SDP.
    */
-  unsigned int audioSsrc, videoSsrc, videoRtxSsrc;
+  unsigned int audio_ssrc;
+  std::vector<uint32_t> video_ssrc_list;
+  std::map<uint32_t, uint32_t> video_rtx_ssrc_map;
   /**
   * Is it Bundle
   */
@@ -274,6 +281,7 @@ class SdpInfo {
 
   std::vector<BundleTag> bundleTags;
   std::vector<ExtMap> extMapVector;
+
   /*
    * MLines for video and audio
    */
@@ -287,12 +295,14 @@ class SdpInfo {
   bool processCandidate(const std::vector<std::string>& pieces, MediaType mediaType);
   std::string stringifyCandidate(const CandidateInfo & candidate);
   void gen_random(char* s, int len);
+  void maybeAddSsrcToList(uint32_t ssrc);
   std::vector<CandidateInfo> candidateVector_;
   std::vector<CryptoInfo> cryptoVector_;
   std::vector<RtpMap> internalPayloadVector_;
   std::string iceVideoUsername_, iceAudioUsername_;
   std::string iceVideoPassword_, iceAudioPassword_;
   std::map<unsigned int, RtpMap> payload_parsed_map_;
+  std::vector<ExtMap> supported_ext_map_;
 };
 }  // namespace erizo
 #endif  // ERIZO_SRC_ERIZO_SDPINFO_H_

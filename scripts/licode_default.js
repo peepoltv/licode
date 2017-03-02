@@ -60,6 +60,7 @@ config.erizoController.maxAudioBW = 96;  //default value: 64
 // Public erizoController IP for websockets (useful when behind NATs)
 // Use '' to automatically get IP from the interface
 config.erizoController.publicIP = ''; //default value: ''
+config.erizoController.networkinterface = ''; //default value: ''
 
 // This configuration is used by the clients to reach erizoController
 // Use '' to use the public IP address instead of a hostname
@@ -87,7 +88,7 @@ config.erizoController.interval_time_keepAlive = 1000; // default value: 1000
 
 // Roles to be used by services
 config.erizoController.roles =
-{"presenter": {"publish": true, "subscribe": true, "record": true},
+{"presenter": {"publish": true, "subscribe": true, "record": true, "stats": true, "controlhandlers": true},
     "viewer": {"subscribe": true},
     "viewerWithData": {"subscribe": true, "publish": {"audio": false, "video": false, "screen": false, "data": true}}}; // default value: {"presenter":{"publish": true, "subscribe":true, "record":true}, "viewer":{"subscribe":true}, "viewerWithData":{"subscribe":true, "publish":{"audio":false,"video":false,"screen":false,"data":true}}}
 
@@ -117,6 +118,7 @@ config.erizoAgent.prerunProcesses = 1; // default value: 1
 // Public erizoAgent IP for ICE candidates (useful when behind NATs)
 // Use '' to automatically get IP from the interface
 config.erizoAgent.publicIP = ''; //default value: ''
+config.erizoAgent.networkinterface = ''; //default value: ''
 
 // Use the name of the inferface you want to bind for ICE candidates
 // config.erizoAgent.networkInterface = 'eth1' // default value: undefined
@@ -156,10 +158,13 @@ config.erizo.turnserver = ''; // default value: ''
 config.erizo.turnport = 0; // default value: 0
 config.erizo.turnusername = '';
 config.erizo.turnpass = '';
+config.erizo.networkinterface = ''; //default value: ''
 
 //note, this won't work with all versions of libnice. With 0 all the available ports are used
 config.erizo.minport = 0; // default value: 0
 config.erizo.maxport = 0; // default value: 0
+
+config.erizo['disabled_handlers'] = ['quality_filter']; // there are no handlers disabled by default
 
 /***** END *****/
 // Following lines are always needed.
