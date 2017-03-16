@@ -8,6 +8,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/time.h>
 }
 
 #include <string>
@@ -26,7 +27,7 @@ struct RTPInfo {
 };
 
 enum ProcessorType {
-  RTP_ONLY, AVF, PACKAGE_ONLY
+  RTP_ONLY, AVF, PACKAGE_ONLY, PACKAGE_ONLY_NO_RESCALE_TS
 };
 
 
@@ -141,9 +142,9 @@ class OutputProcessor: public RawDataReceiver {
   void close();
   void receiveRawData(const RawDataPacket& packet);
 
-  int packageAudio(unsigned char* inBuff, int inBuffLen, unsigned char* outBuff, long int pts = 0);  // NOLINT
+  int packageAudio(unsigned char* inBuff, int inBuffLen, unsigned char* outBuff, int64_t pts = 0);  // NOLINT
 
-  int packageVideo(unsigned char* inBuff, int buffSize, unsigned char* outBuff, long int pts = 0);  // NOLINT
+  int packageVideo(unsigned char* inBuff, int buffSize, unsigned char* outBuff, int64_t pts = 0);  // NOLINT
 
  private:
   int audioCoder;
