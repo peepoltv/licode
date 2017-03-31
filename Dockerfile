@@ -7,6 +7,8 @@ ARG BRANCH
 WORKDIR /opt/licode
 
 RUN apt-get update --fix-missing
+# yikes installNuve requiere this :(
+RUN apt-get install -y default-jdk
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 
