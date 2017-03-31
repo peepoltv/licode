@@ -6,6 +6,7 @@
 #include "./logger.h"
 #include "pipeline/Handler.h"
 #include "lib/Clock.h"
+#include "lib/TokenBucket.h"
 #include "rtp/SequenceNumberTranslator.h"
 #include "./Stats.h"
 
@@ -13,7 +14,7 @@ namespace erizo {
 
 class WebRtcConnection;
 
-class RtpPaddingGeneratorHandler: public Handler {
+class RtpPaddingGeneratorHandler: public Handler, public std::enable_shared_from_this<RtpPaddingGeneratorHandler> {
   DECLARE_LOGGER();
 
  public:
@@ -61,10 +62,9 @@ class RtpPaddingGeneratorHandler: public Handler {
   bool enabled_;
   bool first_packet_received_;
   MovingIntervalRateStat marker_rate_;
-  MovingIntervalRateStat padding_bitrate_;
   uint32_t rtp_header_length_;
-  uint64_t remb_value_;
-  bool fast_start_;
+  TokenBucket bucket_;
+  int scheduled_task_;
 };
 
 }  // namespace erizo

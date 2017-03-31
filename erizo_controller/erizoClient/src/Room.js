@@ -204,7 +204,7 @@ Erizo.Room = function (spec) {
 
 
             myStream.pc[arg.peerSocket].oniceconnectionstatechange = function (state) {
-                if (state === 'failed') {
+                if (state === 'failed' || state === 'disconnected') {
                     myStream.pc[arg.peerSocket].close();
                     delete myStream.pc[arg.peerSocket];
                 }
@@ -452,8 +452,8 @@ Erizo.Room = function (spec) {
         options._simulcast = options._simulcast || false;
 
         // 1- If the stream is not local or it is a failed stream we do nothing.
-        if (stream && stream.local && !stream.failed
-          && that.localStreams[stream.getID()] === undefined) {
+        if (stream && stream.local && !stream.failed && 
+            that.localStreams[stream.getID()] === undefined) {
 
             // 2- Publish Media Stream to Erizo-Controller
             if (stream.hasAudio() || stream.hasVideo() || stream.hasScreen()) {
