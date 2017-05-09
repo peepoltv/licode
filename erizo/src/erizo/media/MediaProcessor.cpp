@@ -335,7 +335,8 @@ int OutputProcessor::init(const MediaInfo& info, RTPDataReceiver* rtpReceiver) {
   encodedBuffer_ = (unsigned char*) malloc(UNPACKAGED_BUFFER_SIZE);
   packagedBuffer_ = (unsigned char*) malloc(PACKAGED_BUFFER_SIZE);
   rtpBuffer_ = (unsigned char*) malloc(PACKAGED_BUFFER_SIZE);
-  if (info.processorType == PACKAGE_ONLY) {
+  if (info.processorType == PACKAGE_ONLY
+      || info.processorType == PACKAGE_ONLY_NO_RESCALE_TS) {
     this->initVideoPackager();
     this->initAudioPackager();
     return 0;
@@ -436,39 +437,40 @@ bool OutputProcessor::initVideoPackager() {
 }
 
 int OutputProcessor::packageAudio(unsigned char* inBuff, int inBuffLen, unsigned char* outBuff,
-                                  long int pts) {  // NOLINT
+                                  int64_t pts) {  // NOLINT
   if (audioPackager == 0) {
     ELOG_DEBUG("No se ha inicializado el codec de output audio RTP");
     return -1;
   }
 
-  // uint64_t millis = ClockUtils::timePointToMs(clock::now());
-
   RtpHeader head;
   head.setSeqNumber(audioSeqnum_++);
-  // head.setTimestamp(millis*8);
-  head.setMarker(1);
-  if (pts == 0) {
-    // head.setTimestamp(audioSeqnum_*160);
+  // The marker bit (M) of the RTP header has no function in combination with Opus and MAY be ignored.
+  // https://tools.ietf.org/id/draft-spittka-payload-rtp-opus-00.html#rfc.section.4.1
+  if (mediaInfo.audioCodec.codec == AUDIO_CODEC_OPUS) {
+    head.setMarker(0);
+  } else {
+    head.setMarker(1);
+  }
+
+  if (mediaInfo.processorType == PACKAGE_ONLY_NO_RESCALE_TS) {
+    head.setTimestamp(pts);
+  } else if (pts == 0) {
     head.setTimestamp(av_rescale(audioSeqnum_, (mediaInfo.audioCodec.sampleRate/1000), 1));
   } else {
-    // head.setTimestamp(pts*8);
     head.setTimestamp(av_rescale(pts, mediaInfo.audioCodec.sampleRate, 1000));
   }
   head.setSSRC(44444);
   head.setPayloadType(mediaInfo.rtpAudioInfo.PT);
 
-  // memcpy (rtpAudioBuffer_, &head, head.getHeaderLength());
-  // memcpy(&rtpAudioBuffer_[head.getHeaderLength()], inBuff, inBuffLen);
   memcpy(outBuff, &head, head.getHeaderLength());
   memcpy(&outBuff[head.getHeaderLength()], inBuff, inBuffLen);
-  // sink_->sendData(rtpBuffer_, l);
-  // rtpReceiver_->receiveRtpData(rtpBuffer_, (inBuffLen + RTP_HEADER_LEN));
+
   return (inBuffLen + head.getHeaderLength());
 }
 
 int OutputProcessor::packageVideo(unsigned char* inBuff, int buffSize, unsigned char* outBuff,
-                                  long int pts) {  // NOLINT
+                                  int64_t pts) {  // NOLINT
   if (videoPackager == 0) {
     ELOG_DEBUG("No se ha inicailizado el codec de output vídeo RTP");
     return -1;
@@ -481,28 +483,33 @@ int OutputProcessor::packageVideo(unsigned char* inBuff, int buffSize, unsigned 
   bool lastFrame = false;
   unsigned int outlen = 0;
   uint64_t millis = ClockUtils::timePointToMs(clock::now());
-  // timestamp_ += 90000 / mediaInfo.videoCodec.frameRate;
-  // int64_t pts = av_rescale(lastPts_, 1000000, (long int)video_time_base_);
+  int packet_count = 0;
 
   do {
+    packet_count ++;
     outlen = 0;
     frag.getPacket(outBuff, &outlen, &lastFrame);
     RtpHeader rtpHeader;
     rtpHeader.setMarker(lastFrame?1:0);
     rtpHeader.setSeqNumber(seqnum_++);
-    if (pts == 0) {
-        rtpHeader.setTimestamp(av_rescale(millis, 90000, 1000));
+
+    if (mediaInfo.processorType == PACKAGE_ONLY_NO_RESCALE_TS) {
+      rtpHeader.setTimestamp(pts);
+    } else if (pts == 0) {
+      rtpHeader.setTimestamp(av_rescale(millis, 90000, 1000));
     } else {
-        rtpHeader.setTimestamp(av_rescale(pts, 90000, 1000));
+      rtpHeader.setTimestamp(av_rescale(pts, 90000, 1000));
     }
     rtpHeader.setSSRC(55543);
-    rtpHeader.setPayloadType(100);
+    rtpHeader.setPayloadType(VP8_90000_PT);
     memcpy(rtpBuffer_, &rtpHeader, rtpHeader.getHeaderLength());
     memcpy(&rtpBuffer_[rtpHeader.getHeaderLength()], outBuff, outlen);
 
     int l = outlen + rtpHeader.getHeaderLength();
     rtpReceiver_->receiveRtpData(rtpBuffer_, l);
   } while (!lastFrame);
+
+  //ELOG_DEBUG("Video Packet Count: %d, last TS: %lld", packet_count, pts);
 
   return 0;
 }
