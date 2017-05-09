@@ -58,6 +58,19 @@ struct dataPacket {
     return item != compatible_temporal_layers.end();
   }
 
+  const char* typeToString() {
+    switch (type) {
+      case AUDIO_PACKET:
+        return "AUDIO_PACKET";
+      case VIDEO_PACKET:
+        return "VIDEO_PACKET";
+      case OTHER_PACKET:
+        return "OTHER_PACKET";
+      default:
+        return "UNKNOWN";
+    }
+  }
+
   int comp;
   char data[1500];
   int length;
