@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <inttypes.h>
 
 #include "./WebRtcConnection.h"
 
@@ -80,11 +81,11 @@ int ExternalInput::init() {
     media_info_.hasAudio = true;
     audio_stream_index_ = audioStreamNo;
     audio_st = context_->streams[audio_stream_index_];
-    ELOG_DEBUG("Has Audio, audio stream number %d. time base = %d / %d. start time = %lld",
+    ELOG_DEBUG("Has Audio, audio stream number %d. time base = %d / %d. start time = %" PRId64,
                audio_stream_index_, audio_st->time_base.num, audio_st->time_base.den,
                audio_st->start_time);
     audio_time_base_ = audio_st->time_base.den;
-    ELOG_DEBUG("Audio Time base %lld", audio_time_base_);
+    ELOG_DEBUG("Audio Time base %" PRId64, audio_time_base_);
     if (audio_st->codec->codec_id == AV_CODEC_ID_PCM_MULAW) {
       ELOG_DEBUG("PCM U8");
       media_info_.audioCodec.sampleRate = 8000;
@@ -105,7 +106,7 @@ int ExternalInput::init() {
     video_avg_frame_rate_ = video_st->avg_frame_rate;
     ELOG_DEBUG("No need for video transcoding, already VP8");
     ELOG_DEBUG("Average Framerate: %d / %d", video_avg_frame_rate_.num, video_avg_frame_rate_.den);
-    ELOG_DEBUG("Video Time base: %lld, start time: %lld", video_time_base_, video_st->start_time);
+    ELOG_DEBUG("Video Time base: %" PRId64 ", start time: %" PRId64,  video_time_base_, video_st->start_time);
     needTranscoding_ = false;
     decodedBuffer_.reset((unsigned char*) malloc(100000));
     MediaInfo media_info_;
@@ -182,7 +183,7 @@ void ExternalInput::receiveLoop() {
 
   av_read_play(context_);
   delivery_state_.startClock();
-  ELOG_DEBUG("Start time set to: %lld", delivery_state_.start_time);
+  ELOG_DEBUG("Start time set to: %" PRId64, delivery_state_.start_time);
 
   ELOG_DEBUG("Input Format: %s", context_->iformat->name);
   if (strcmp(context_->iformat->name, "rtsp") == 0) {
@@ -238,8 +239,6 @@ void ExternalInput::receiveLoop() {
 
       time_pts = av_rescale(pts, AV_TIME_BASE, input_time_base);
       timestamp = av_rescale(pts, output_sample_rate, input_time_base);
-      //ELOG_DEBUG("Packet PTS: %lld, DTS: %lld, Timestamp: %lld, TimePTS: %lld",
-      //    avpacket_.pts, avpacket_.dts, timestamp, time_pts);
 
       // Video
       if (media_type == VIDEO) {
@@ -352,11 +351,12 @@ bool ExternalInput::deliverPacket() {
 
   /*
    * Uncomment this will cause every packet to be logged in a separated file.
+  */
   std::fstream *log_stream = packet.packet_type == VIDEO_PACKET ? &video_queue_log_ : &audio_queue_log_;
   *log_stream << "Q Size: " << delivery_state_.packet_queue.size() << ", Status: " << packet_status_str_buffer.str() << ", PTS: " \
-    << time_pts << ", MClock: " << master_clock << ", New MClock: " << delivery_state_.getMasterClock() << \
+    << packet.time_pts << ", MClock: " << master_clock << ", New MClock: " << delivery_state_.getMasterClock() << \
     ", Diff: " << clock_diff << std::endl;
-  */
+  //*/
 
 
   packet_queue_mutex.unlock();
