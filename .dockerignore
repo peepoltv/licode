@@ -1,0 +1,12 @@
+.DS_Store
+.project
+.cproject
+licode_config.js
+rtp_media_config.js
+build/
+node_modules/
+erizo/build
+erizoAPI/build
+erizoAPI/.lock-wscript
+erizo_controller/erizoClient/dist/erizofc.js
+erizo_controller/erizoClient/build/erizofc.js
