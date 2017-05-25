@@ -38,6 +38,12 @@ var stream = Erizo.Stream({screen: true, data: true, attributes: {name:'myStream
 
 Note that, if you use a Stream this way, the client that will share its sreen must access to your web app using a secure connection (with https protocol) and use a screensharing plugin as explained <a href="http://lynckia.com/licode/plugin.html" target="_blank">here</a>.
 
+Additionally, in Chrome, you can use your own extension outside of Licode and directly pass the `chromeMediaSourceId` as a parameter:
+
+```
+var stream = Erizo.Stream({screen: true, data: true, attributes: {name:'myStream'}, desktopStreamId:'ID_PROVIDED_BY_YOUR_EXTENSION'});
+```
+
 You can also specify some constraints about the video size when creating a stream. In order to do this you need to include a `videoSize` parameter that is an array with the following format: `[minWidth, minHeight, maxWidth, maxHeight]`
 
 ```
@@ -391,8 +397,20 @@ room.publish(localStream, {maxVideoBW:300}, function(id, error){
   } else {
     console.log("Published stream", id);
   }
-});            
+});
 ```
+
+### Publish Simulcast Streams
+
+You can enable Simulcast in the publisher by adding the next option:
+
+```
+room.publish(localStream, {simulcast: {numSpatialLayers: 2}});
+```
+
+Being `numSpatialLayers` the max number of spatial layers the publisher will send.
+
+**Note:** Simulcast only works with Google Chrome and it's not compatible with Licode's recording yet.
 
 ## Subscribe to a remote stream
 
@@ -862,6 +880,15 @@ In this example we will make a basic videoconference application. Every client t
   </body>
 </html>
 ```
+# Customize Logging
+
+You can configure and customize the way ErizoClient:
+
+| Function                               | Description                                                                                         |
+|----------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `L.Logger.setLogLevel(LogLevel)`         | Sets the log level from 0 (DEBUG) to 5(NONE) with decreasing level of detail               |
+| `L.Logger.setLogPrefix(logPrefix)`       | You can pass a string as a prefix for every log ErizoClient log message              |
+| `L.Logger.setOutputFunction(outputFunction)`      | You can pass a function that takes an array forming the log message to further customize the output|
 
 # Node.js Client
 

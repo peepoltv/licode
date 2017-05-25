@@ -204,9 +204,11 @@ Erizo.Room = function (spec) {
 
 
             myStream.pc[arg.peerSocket].oniceconnectionstatechange = function (state) {
-                if (state === 'failed' || state === 'disconnected') {
+                if (state === 'failed') {
                     myStream.pc[arg.peerSocket].close();
                     delete myStream.pc[arg.peerSocket];
+                } else if (state === 'disconnected') {
+                    // TODO handle behaviour. Myabe implement Ice-Restart mechanism
                 }
             };
 
@@ -448,11 +450,10 @@ Erizo.Room = function (spec) {
             options.minVideoBW = spec.defaultVideoBW;
         }
 
-        // TODO(javier): remove dangling once Simulcast is stable
-        options._simulcast = options._simulcast || false;
+        options.simulcast = options.simulcast || options._simulcast || false;
 
         // 1- If the stream is not local or it is a failed stream we do nothing.
-        if (stream && stream.local && !stream.failed && 
+        if (stream && stream.local && !stream.failed &&
             that.localStreams[stream.getID()] === undefined) {
 
             // 2- Publish Media Stream to Erizo-Controller
@@ -582,7 +583,7 @@ Erizo.Room = function (spec) {
                                maxVideoBW: options.maxVideoBW,
                                limitMaxAudioBW: spec.maxAudioBW,
                                limitMaxVideoBW: spec.maxVideoBW,
-                               simulcast: options._simulcast,
+                               simulcast: options.simulcast,
                                audio: stream.hasAudio(),
                                video: stream.hasVideo()});
 
