@@ -302,11 +302,11 @@ bool LibNiceConnection::setRemoteCandidates(const std::vector<CandidateInfo> &ca
          << ", hostPort: " << cinfo.hostPort;
 
     if (cinfo.hostType == RELAY || cinfo.hostType == SRFLX) {
-      nice_address_set_from_string(&thecandidate->base_addr, cinfo.rAddress.c_str());
-      nice_address_set_port(&thecandidate->base_addr, cinfo.rPort);
       ELOG_DEBUG("%s message: adding relay or srflx remote candidate, %s, rAddress: %s, rPort: %d",
                  toLog(), host_info.str().c_str(),
                  cinfo.rAddress.c_str(), cinfo.rPort);
+      nice_address_set_from_string(&thecandidate->base_addr, cinfo.rAddress.c_str());
+      nice_address_set_port(&thecandidate->base_addr, cinfo.rPort);
     } else {
       ELOG_DEBUG("%s message: adding remote candidate, %s, priority: %d, componentId: %d, ufrag: %s, pass: %s",
           toLog(), host_info.str().c_str(), cinfo.priority, cinfo.componentId, cinfo.username.c_str(),
