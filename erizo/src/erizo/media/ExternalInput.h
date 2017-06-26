@@ -39,7 +39,7 @@ struct PacketDeliveryState {
   int64_t start_time = -1;
   std::shared_ptr<int64_t> audio_clock = std::make_shared<int64_t> (0);
   std::shared_ptr<int64_t> video_clock = std::make_shared<int64_t> (0);
-  unsigned long delivered_count = 0;
+  int64_t delivered_count = 0;
   std::deque<AVPacketProcessed> packet_queue;
   int64_t startClock() {
     start_time = av_gettime();

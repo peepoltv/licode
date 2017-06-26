@@ -486,7 +486,7 @@ int OutputProcessor::packageVideo(unsigned char* inBuff, int buffSize, unsigned 
   int packet_count = 0;
 
   do {
-    packet_count ++;
+    packet_count++;
     outlen = 0;
     frag.getPacket(outBuff, &outlen, &lastFrame);
     RtpHeader rtpHeader;
@@ -509,7 +509,7 @@ int OutputProcessor::packageVideo(unsigned char* inBuff, int buffSize, unsigned 
     rtpReceiver_->receiveRtpData(rtpBuffer_, l);
   } while (!lastFrame);
 
-  //ELOG_DEBUG("Video Packet Count: %d, last TS: %lld", packet_count, pts);
+  // ELOG_DEBUG("Video Packet Count: %d, last TS: %lld", packet_count, pts);
 
   return 0;
 }

@@ -28,17 +28,18 @@ ExternalInput::~ExternalInput() {
   if (needTranscoding_)
     encodeThread_.join();
   av_free_packet(&avpacket_);
-  if (context_ != NULL)
+  if (context_ != NULL) {
     avformat_close_input(&context_);
     avformat_free_context(context_);
+  }
   ELOG_DEBUG("ExternalInput closed");
   video_queue_log_.close();
   audio_queue_log_.close();
 }
 
 int ExternalInput::init() {
-  video_queue_log_.open ("video_queue_log_.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
-  audio_queue_log_.open ("audio_queue_log_.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
+  video_queue_log_.open("video_queue_log_.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
+  audio_queue_log_.open("audio_queue_log_.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
   context_ = avformat_alloc_context();
   av_register_all();
   avcodec_register_all();
@@ -251,7 +252,6 @@ void ExternalInput::receiveLoop() {
 
       // Audio
       } else if (media_type == AUDIO) {
-
         int length = op_->packageAudio(avpacket_.data, avpacket_.size, decodedBuffer_.get(), timestamp);
         if (length > 0) {
           std::shared_ptr<dataPacket> packet = std::make_shared<dataPacket>(0,
@@ -309,11 +309,11 @@ bool ExternalInput::deliverPacket() {
   AVPacketProcessed packet = delivery_state_.packet_queue.front();
   int64_t master_clock = delivery_state_.getMasterClock();
   int64_t clock_diff = master_clock - packet.time_pts;
-  //int64_t last_packet_diff = packet.time_pts - stream_clock;
+  // int64_t last_packet_diff = packet.time_pts - stream_clock;
   int64_t threshold = packet.packet_type == AUDIO_PACKET ? 20000 : 40000;
 
   // Is in our range
-  if (std::abs(clock_diff) >= 0 && std::abs(clock_diff) < threshold ) {
+  if ((std::abs(clock_diff) >= 0) && (std::abs(clock_diff) < threshold)) {
     deliver_packet = true;
 
   // Too soon, not deliver.
@@ -325,7 +325,7 @@ bool ExternalInput::deliverPacket() {
   } else if (clock_diff > 0) {
     deliver_packet = false;
     int dropped_count = 0;
-    while(delivery_state_.packet_queue.size() > 0 && delivery_state_.packet_queue.front().time_pts < master_clock) {
+    while (delivery_state_.packet_queue.size() > 0 && delivery_state_.packet_queue.front().time_pts < master_clock) {
       delivery_state_.packet_queue.pop_front();
       dropped_count++;
     }
@@ -341,10 +341,10 @@ bool ExternalInput::deliverPacket() {
 
     } else if (packet.packet_type == AUDIO_PACKET && audio_sink_ != nullptr) {
       audio_sink_->deliverAudioData(packet.rtp_packet);
-      //delivery_state_.setMasterClock(clock_diff);
+      // delivery_state_.setMasterClock(clock_diff);
     }
 
-    //updateClock(packet.packet_type, packet.time_pts);
+    // updateClock(packet.packet_type, packet.time_pts);
     delivery_state_.delivered_count++;
     packet_status_str_buffer << "DELIVERED";
   }
