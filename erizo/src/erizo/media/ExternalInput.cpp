@@ -351,12 +351,11 @@ bool ExternalInput::deliverPacket() {
 
   /*
    * Uncomment this will cause every packet to be logged in a separated file.
-  */
   std::fstream *log_stream = packet.packet_type == VIDEO_PACKET ? &video_queue_log_ : &audio_queue_log_;
   *log_stream << "Q Size: " << delivery_state_.packet_queue.size() << ", Status: " << packet_status_str_buffer.str() << ", PTS: " \
     << packet.time_pts << ", MClock: " << master_clock << ", New MClock: " << delivery_state_.getMasterClock() << \
     ", Diff: " << clock_diff << std::endl;
-  //*/
+  */
 
 
   packet_queue_mutex.unlock();
