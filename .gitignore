@@ -17,3 +17,5 @@ erizo_controller/erizoAgent/erizo-*.log
 spine/erizofc.js
 extras/basic_example/public/assets/
 rtp_media_config.js
+cache
+third_party
