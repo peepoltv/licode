@@ -622,15 +622,15 @@ const Room = (altIo, altConnection, specInput) => {
       return;
     }
     Logger.debug(`Start Recording stream: ${stream.getID()}`);
-    socket.sendMessage('startRecorder', { to: stream.getID() }, (id, error) => {
-      if (id === null) {
+    socket.sendMessage('startRecorder', { to: stream.getID() }, (result, error) => {
+      if (result.id === null) {
         Logger.error('Error on start recording', error);
-        callback(undefined, error);
+        callback(undefined, error, undefined);
         return;
       }
 
-      Logger.info('Start recording', id);
-      callback(id);
+      Logger.info('Start recording', result.id);
+      callback(result.id, undefined, result.timestamp);
     });
   };
 
