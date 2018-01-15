@@ -24,11 +24,10 @@ extern "C" {
 #include <fstream>
 
 namespace erizo {
-class WebRtcConnection;
 
 struct AVPacketProcessed {
   packetType packet_type;
-  std::shared_ptr<dataPacket> rtp_packet;
+  std::shared_ptr<DataPacket> rtp_packet;
   int64_t time_pts;
   bool operator<(AVPacketProcessed const &other) const {
     return time_pts < other.time_pts;

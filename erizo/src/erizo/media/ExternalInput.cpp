@@ -110,7 +110,6 @@ int ExternalInput::init() {
     ELOG_DEBUG("Video Time base: %" PRId64 ", start time: %" PRId64,  video_time_base_, video_st->start_time);
     needTranscoding_ = false;
     decodedBuffer_.reset((unsigned char*) malloc(100000));
-    MediaInfo media_info_;
     media_info_.rtpVideoInfo.PT = VP8_90000_PT;
     media_info_.processorType = PACKAGE_ONLY_NO_RESCALE_TS;
     if (audio_st->codec->codec_id == AV_CODEC_ID_PCM_MULAW) {
@@ -169,7 +168,7 @@ int ExternalInput::sendPLI() {
 
 
 void ExternalInput::receiveRtpData(unsigned char* rtpdata, int len) {
-  std::shared_ptr<dataPacket> packet = std::make_shared<dataPacket>(
+  std::shared_ptr<DataPacket> packet = std::make_shared<DataPacket>(
       0, reinterpret_cast<char*>(rtpdata), len, VIDEO_PACKET);
 
   AVPacketProcessed processed_packet = AVPacketProcessed{VIDEO_PACKET, packet, video_last_time_pts_};
@@ -254,7 +253,7 @@ void ExternalInput::receiveLoop() {
       } else if (media_type == AUDIO) {
         int length = op_->packageAudio(avpacket_.data, avpacket_.size, decodedBuffer_.get(), timestamp);
         if (length > 0) {
-          std::shared_ptr<dataPacket> packet = std::make_shared<dataPacket>(0,
+          std::shared_ptr<DataPacket> packet = std::make_shared<DataPacket>(0,
               reinterpret_cast<char*>(decodedBuffer_.get()), length, AUDIO_PACKET);
 
           AVPacketProcessed processed_packet = AVPacketProcessed{AUDIO_PACKET, packet, time_pts};
