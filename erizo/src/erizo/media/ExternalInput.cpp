@@ -64,11 +64,13 @@ int ExternalInput::init() {
   }
 
   // Streams
-  AVStream *video_st, *audio_st;
+  AVStream *video_st = nullptr;
+  AVStream *audio_st = nullptr;
 
   int streamNo = av_find_best_stream(context_, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
   if (streamNo < 0) {
     ELOG_WARN("No Video stream found");
+    media_info_.hasVideo = false;
   } else {
     media_info_.hasVideo = true;
     video_stream_index_ = streamNo;
@@ -78,6 +80,7 @@ int ExternalInput::init() {
   int audioStreamNo = av_find_best_stream(context_, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
   if (audioStreamNo < 0) {
     ELOG_WARN("No Audio stream found");
+    media_info_.hasAudio = false;
   } else {
     media_info_.hasAudio = true;
     audio_stream_index_ = audioStreamNo;
@@ -102,7 +105,7 @@ int ExternalInput::init() {
       video_st = audio_st;
   }
 
-  if (video_st->codec->codec_id == AV_CODEC_ID_VP8 || !media_info_.hasVideo) {
+  if (media_info_.hasVideo && (video_st->codec->codec_id == AV_CODEC_ID_VP8 || !media_info_.hasVideo)) {
     video_time_base_ = video_st->time_base.den;
     video_avg_frame_rate_ = video_st->avg_frame_rate;
     ELOG_DEBUG("No need for video transcoding, already VP8");
@@ -112,7 +115,7 @@ int ExternalInput::init() {
     decodedBuffer_.reset((unsigned char*) malloc(100000));
     media_info_.rtpVideoInfo.PT = VP8_90000_PT;
     media_info_.processorType = PACKAGE_ONLY_NO_RESCALE_TS;
-    if (audio_st->codec->codec_id == AV_CODEC_ID_PCM_MULAW) {
+    if (media_info_.hasAudio && audio_st->codec->codec_id == AV_CODEC_ID_PCM_MULAW) {
       ELOG_DEBUG("PCM U8");
       media_info_.audioCodec.sampleRate = 8000;
       media_info_.audioCodec.codec = AUDIO_CODEC_PCM_U8;
@@ -125,7 +128,7 @@ int ExternalInput::init() {
     }
     op_.reset(new OutputProcessor());
     op_->init(media_info_, this);
-  } else {
+  } else if (video_st) {
     needTranscoding_ = true;
     inCodec_.initDecoder(video_st->codec);
 
@@ -178,7 +181,7 @@ void ExternalInput::receiveRtpData(unsigned char* rtpdata, int len) {
 void ExternalInput::receiveLoop() {
   int gotDecodedFrame = 0;
   int packet_count = 0;
-  DataType media_type;
+  DataType media_type = NONE;
   std::string media_type_string;
 
   av_read_play(context_);
@@ -250,7 +253,7 @@ void ExternalInput::receiveLoop() {
         op_->packageVideo(avpacket_.data, avpacket_.size, decodedBuffer_.get(), timestamp);
 
       // Audio
-      } else if (media_type == AUDIO) {
+      } else if (media_type && media_type == AUDIO) {
         int length = op_->packageAudio(avpacket_.data, avpacket_.size, decodedBuffer_.get(), timestamp);
         if (length > 0) {
           std::shared_ptr<DataPacket> packet = std::make_shared<DataPacket>(0,

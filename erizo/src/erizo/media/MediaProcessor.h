@@ -32,7 +32,7 @@ enum ProcessorType {
 
 
 enum DataType {
-  VIDEO, AUDIO
+  NONE, VIDEO, AUDIO
 };
 
 struct RawDataPacket {
