@@ -13,7 +13,7 @@ COPY scripts/installUbuntuDeps.sh scripts/checkNvm.sh /opt/licode/scripts/
 
 WORKDIR /opt/licode/scripts
 
-RUN ./installUbuntuDeps.sh --cleanup --fast
+RUN ./installUbuntuDeps.sh --cleanup --fast --enable-gpl
 
 WORKDIR /opt
 
